@@ -26,6 +26,7 @@ from app.meeting.adapters.minutes_llm import (
 )
 from app.meeting.adapters.transcriber import (
     MockTranscriber,
+    OpenAIWhisperTranscriber,
     Transcriber,
     UnconfiguredTranscriber,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "MockFeishuTaskAdapter",
     "MockMinutesLLM",
     "MockTranscriber",
+    "OpenAIWhisperTranscriber",
     "Transcriber",
     "UnconfiguredMinutesLLM",
     "UnconfiguredTranscriber",

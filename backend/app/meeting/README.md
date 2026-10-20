@@ -23,18 +23,28 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `MOCK_ASR` | `1` | `Transcriber` returns `fixtures/transcript.txt` |
-| `MOCK_LLM` | `1` | `MinutesLLM` returns `fixtures/minutes.json` and `fixtures/todos.json` |
+| `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls OpenAI Whisper when `OPENAI_API_KEY` is set |
+| `MOCK_LLM` | `1` | `MinutesLLM` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` fails closed |
 | `MOCK_FEISHU` | `1` | Task adapter returns in-process receipts and does not call Feishu |
+| `OPENAI_API_KEY` | unset | Required for real ASR when `MOCK_ASR=0`. Never commit a real key |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root, including `/v1`. Used only when `MOCK_ASR=0` |
+| `MEETING_ASR_MODEL` | `whisper-1` | `audio/transcriptions` model. Used only when `MOCK_ASR=0` |
 | `MEETING_REVIEW_TOKEN_TTL_SECONDS` | `3600` | Review token lifetime |
 | `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` |
 | `FEISHU_API_BASE` | `https://open.feishu.cn` | Feishu Open API origin |
 
-Set a flag to `0` to leave the mock path. Real ASR and LLM vendors are not
-wired yet; those calls fail the run instead of inventing a provider. A Feishu
-write with `MOCK_FEISHU=0` and missing credentials is refused before any HTTP
-call and does not consume the review token.
+Set `MOCK_ASR=0` to call OpenAI `POST /audio/transcriptions`. The request
+sends the audio file and `MEETING_ASR_MODEL` with `Authorization: Bearer`.
+`OPENAI_BASE_URL` may point at any compatible OpenAI-HTTP endpoint. A missing
+or blank `OPENAI_API_KEY` raises `ProviderNotConfigured` and does not invent
+a transcript. The default `MOCK_ASR=1` stays on the fixture even if a key is
+present.
+
+`MOCK_LLM=0` still fails closed. A real minutes model is not wired.
+
+A Feishu write with `MOCK_FEISHU=0` and missing credentials is refused before
+any HTTP call and does not consume the review token.
 
 ## Paths
 

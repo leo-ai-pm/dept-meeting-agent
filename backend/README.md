@@ -40,8 +40,9 @@ export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 ### Meeting efficiency module
 
 Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
-`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. See
-`app/meeting/README.md` for the local run, review token, and Feishu flags.
+`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. `MOCK_ASR=0` calls
+OpenAI Whisper when `OPENAI_API_KEY` is set; `MOCK_LLM=0` still fails closed.
+See `app/meeting/README.md` for the local run, review token, and Feishu flags.
 
 ```bash
 export MOCK_ASR=1 MOCK_LLM=1 MOCK_FEISHU=1
