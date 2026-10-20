@@ -38,6 +38,7 @@ from app.meeting.adapters.minutes_llm import (
 )
 from app.meeting.adapters.transcriber import (
     MockTranscriber,
+    OpenAIWhisperTranscriber,
     Transcriber,
     UnconfiguredTranscriber,
 )
@@ -640,14 +641,25 @@ class MeetingService:
         }
 
 
+def _build_transcriber() -> Transcriber:
+    if env_flag("MOCK_ASR", "1"):
+        return MockTranscriber()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return UnconfiguredTranscriber()
+    base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
+    model = os.environ.get("MEETING_ASR_MODEL", "").strip()
+    return OpenAIWhisperTranscriber(
+        api_key=api_key,
+        base_url=base_url or "https://api.openai.com/v1",
+        model=model or "whisper-1",
+    )
+
+
 def build_meeting_service() -> MeetingService:
-    transcriber: Transcriber
     minutes_llm: MinutesLLM
     feishu: FeishuTaskAdapter
-    if env_flag("MOCK_ASR", "1"):
-        transcriber = MockTranscriber()
-    else:
-        transcriber = UnconfiguredTranscriber()
+    transcriber = _build_transcriber()
     if env_flag("MOCK_LLM", "1"):
         minutes_llm = MockMinutesLLM()
     else:
