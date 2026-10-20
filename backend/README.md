@@ -37,6 +37,18 @@ export EIGENT_HANDS_MODE=remote
 export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 ```
 
+### Meeting efficiency module
+
+Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
+`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. See
+`app/meeting/README.md` for the local run, review token, and Feishu flags.
+
+```bash
+export MOCK_ASR=1 MOCK_LLM=1 MOCK_FEISHU=1
+uv run uvicorn main:api --port 5001
+# acceptance page: http://127.0.0.1:5001/meeting/ui
+```
+
 i18n operation process: https://github.com/Anbarryprojects/fastapi-babel
 
 ```bash

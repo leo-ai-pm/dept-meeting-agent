@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meeting run acceptance</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: Canvas;
+      color: CanvasText;
+      font: 13px/20px system-ui, sans-serif;
+    }
+    h1 { font-size: 28px; line-height: 36px; font-weight: 600; margin: 0 0 8px; }
+    h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 8px; }
+    p { margin: 0; }
+    main { display: grid; gap: 24px; }
+    section { display: grid; gap: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, input, textarea {
+      font: inherit;
+      color: CanvasText;
+      background: Field;
+      border: 1px solid ButtonBorder;
+      border-radius: 12px;
+    }
+    button {
+      min-height: 32px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: ButtonFace;
+      cursor: pointer;
+    }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+    button:disabled { opacity: 0.6; }
+    textarea { min-height: 80px; padding: 8px 12px; width: 100%; box-sizing: border-box; }
+    input[type="text"] { min-height: 32px; padding: 0 12px; }
+    pre {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      border: 1px solid ButtonBorder;
+      border-radius: 12px;
+      font: 12px/18px ui-monospace, monospace;
+      white-space: pre-wrap;
+    }
+    .status { font-weight: 600; }
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Meeting run acceptance</h1>
+      <p>
+        Create a meeting run, import a transcript, review the draft, then try a
+        Feishu task write with and without a review token.
+      </p>
+    </header>
+
+    <section aria-labelledby="run-heading">
+      <h2 id="run-heading">Run</h2>
+      <div class="row">
+        <button type="button" id="create">Create run</button>
+        <button type="button" id="refresh">Refresh</button>
+        <p>Status: <span class="status" id="status">none</span></p>
+      </div>
+      <p id="run-id"></p>
+    </section>
+
+    <section aria-labelledby="import-heading">
+      <h2 id="import-heading">Import transcript</h2>
+      <label for="transcript">Transcript</label>
+      <textarea id="transcript">会议：增长组周会
+李敏：落地页转化实验在周五前复盘。新客优惠只对首单生效。
+张三：我来整理实验数据，下周三前给结论。</textarea>
+      <div class="row">
+        <button type="button" id="import-transcript">Import transcript</button>
+        <button type="button" id="live-start">Start live</button>
+        <button type="button" id="live-stop">Stop live</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="draft-heading">
+      <h2 id="draft-heading">Draft</h2>
+      <pre id="draft">No draft yet.</pre>
+      <div class="row">
+        <button type="button" id="approve">Approve</button>
+        <button type="button" id="reject">Reject</button>
+        <label for="todo-title">First Feishu task title</label>
+        <input id="todo-title" type="text" value="" />
+        <button type="button" id="edit-approve">Edit and approve</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="write-heading">
+      <h2 id="write-heading">Feishu task write</h2>
+      <div class="row">
+        <button type="button" id="write-with">Write with token</button>
+        <button type="button" id="write-without">Write without token</button>
+      </div>
+      <pre id="write-result">No write attempted.</pre>
+    </section>
+
+    <section aria-labelledby="replay-heading">
+      <h2 id="replay-heading">Replay</h2>
+      <button type="button" id="replay">Load event log</button>
+      <pre id="replay-log">No events loaded.</pre>
+    </section>
+  </main>
+  <script>
+    const base = window.location.pathname.replace(/\/ui\/?$/, "");
+    const state = { id: null, token: null, draft: null };
+
+    const statusEl = document.getElementById("status");
+    const runIdEl = document.getElementById("run-id");
+    const draftEl = document.getElementById("draft");
+    const writeEl = document.getElementById("write-result");
+    const replayEl = document.getElementById("replay-log");
+
+    function show(el, value) {
+      el.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    }
+
+    async function api(path, options) {
+      const response = await fetch(base + path, {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      const body = await response.json().catch(() => ({}));
+      return { ok: response.ok, status: response.status, body };
+    }
+
+    function paintRun(run) {
+      state.id = run.id;
+      statusEl.textContent = run.status;
+      runIdEl.textContent = "Run " + run.id;
+    }
+
+    async function refresh() {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id);
+      if (result.ok) paintRun(result.body);
+      else show(writeEl, result.body);
+    }
+
+    document.getElementById("create").addEventListener("click", async () => {
+      const result = await api("/runs", { method: "POST", body: JSON.stringify({ title: "Acceptance run" }) });
+      if (!result.ok) return show(writeEl, result.body);
+      state.token = null;
+      state.draft = null;
+      paintRun(result.body);
+      show(draftEl, "No draft yet.");
+    });
+
+    document.getElementById("refresh").addEventListener("click", refresh);
+
+    document.getElementById("import-transcript").addEventListener("click", async () => {
+      if (!state.id) return;
+      const text = document.getElementById("transcript").value;
+      const result = await api("/runs/" + state.id + "/import/transcript", {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      if (!result.ok) return show(writeEl, result.body);
+      paintRun(result.body);
+      await loadDraft();
+    });
+
+    document.getElementById("live-start").addEventListener("click", async () => {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id + "/live/start", { method: "POST" });
+      if (!result.ok) return show(writeEl, result.body);
+      paintRun(result.body);
+    });
+
+    document.getElementById("live-stop").addEventListener("click", async () => {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id + "/live/stop", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      if (!result.ok) return show(writeEl, result.body);
+      paintRun(result.body);
+      await loadDraft();
+    });
+
+    async function loadDraft() {
+      const result = await api("/runs/" + state.id + "/draft");
+      if (!result.ok) return show(draftEl, result.body);
+      state.draft = result.body;
+      show(draftEl, result.body);
+      const first = (result.body.todos || [])[0];
+      if (first) document.getElementById("todo-title").value = first.title;
+    }
+
+    document.getElementById("approve").addEventListener("click", async () => {
+      await decide({ decision: "approve" });
+    });
+
+    document.getElementById("reject").addEventListener("click", async () => {
+      await decide({ decision: "reject" });
+    });
+
+    document.getElementById("edit-approve").addEventListener("click", async () => {
+      if (!state.draft) return;
+      const todos = JSON.parse(JSON.stringify(state.draft.todos || []));
+      if (todos[0]) todos[0].title = document.getElementById("todo-title").value;
+      await decide({
+        decision: "edit_approve",
+        edits: { minutes: state.draft.minutes, todos },
+      });
+    });
+
+    async function decide(payload) {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id + "/review", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      show(writeEl, result.body);
+      if (result.ok) {
+        state.token = result.body.review_token || null;
+        statusEl.textContent = result.body.status;
+        await loadDraft();
+      }
+    }
+
+    document.getElementById("write-with").addEventListener("click", async () => {
+      await write(state.token);
+    });
+
+    document.getElementById("write-without").addEventListener("click", async () => {
+      await write(null);
+    });
+
+    async function write(token) {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id + "/write_feishu_tasks", {
+        method: "POST",
+        body: JSON.stringify(token ? { review_token: token } : {}),
+      });
+      show(writeEl, { http: result.status, body: result.body });
+      await refresh();
+    }
+
+    document.getElementById("replay").addEventListener("click", async () => {
+      if (!state.id) return;
+      const result = await api("/runs/" + state.id + "/replay");
+      show(replayEl, result.ok ? result.body : result.body);
+    });
+  </script>
+</body>
+</html>
