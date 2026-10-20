@@ -43,6 +43,7 @@ from app.controller import (
     workspace_controller,
     workspace_git_controller,
 )
+from app.meeting.router import router as meeting_router
 
 logger = logging.getLogger("router")
 
@@ -65,6 +66,14 @@ def register_routers(app: FastAPI, prefix: str = "") -> None:
             "router": health_controller.router,
             "tags": ["Health"],
             "description": "Health check endpoint for service readiness",
+        },
+        {
+            "router": meeting_router,
+            "tags": ["Meeting"],
+            "description": (
+                "Meeting runs, automatic minutes pipeline, "
+                "human review, and Feishu task writes"
+            ),
         },
         {
             "router": file_controller.router,
