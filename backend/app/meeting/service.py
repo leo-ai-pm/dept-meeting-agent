@@ -32,9 +32,12 @@ from app.meeting.adapters.feishu import (
     MockFeishuTaskAdapter,
 )
 from app.meeting.adapters.minutes_llm import (
+    VOLCANO_DEFAULT_BASE_URL,
+    VOLCANO_DEFAULT_MODEL,
     MinutesLLM,
     MockMinutesLLM,
     UnconfiguredMinutesLLM,
+    VolcanoMinutesLLM,
 )
 from app.meeting.adapters.transcriber import (
     MockTranscriber,
@@ -656,14 +659,33 @@ def _build_transcriber() -> Transcriber:
     )
 
 
+def _first_env(*names: str) -> str:
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _build_minutes_llm() -> MinutesLLM:
+    if env_flag("MOCK_LLM", "1"):
+        return MockMinutesLLM()
+    api_key = _first_env("VOLCANO_API_KEY", "ARK_API_KEY")
+    if not api_key:
+        return UnconfiguredMinutesLLM()
+    return VolcanoMinutesLLM(
+        api_key=api_key,
+        base_url=_first_env("VOLCANO_BASE_URL", "ARK_BASE_URL")
+        or VOLCANO_DEFAULT_BASE_URL,
+        model=os.environ.get("MEETING_LLM_MODEL", "").strip()
+        or VOLCANO_DEFAULT_MODEL,
+    )
+
+
 def build_meeting_service() -> MeetingService:
-    minutes_llm: MinutesLLM
     feishu: FeishuTaskAdapter
     transcriber = _build_transcriber()
-    if env_flag("MOCK_LLM", "1"):
-        minutes_llm = MockMinutesLLM()
-    else:
-        minutes_llm = UnconfiguredMinutesLLM()
+    minutes_llm = _build_minutes_llm()
     if env_flag("MOCK_FEISHU", "1"):
         feishu = MockFeishuTaskAdapter()
     else:

@@ -23,6 +23,7 @@ from app.meeting.adapters.minutes_llm import (
     MinutesLLM,
     MockMinutesLLM,
     UnconfiguredMinutesLLM,
+    VolcanoMinutesLLM,
 )
 from app.meeting.adapters.transcriber import (
     MockTranscriber,
@@ -42,4 +43,5 @@ __all__ = [
     "Transcriber",
     "UnconfiguredMinutesLLM",
     "UnconfiguredTranscriber",
+    "VolcanoMinutesLLM",
 ]
