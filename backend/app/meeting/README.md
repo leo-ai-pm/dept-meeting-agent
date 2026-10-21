@@ -24,11 +24,16 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls OpenAI Whisper when `OPENAI_API_KEY` is set |
-| `MOCK_LLM` | `1` | `MinutesLLM` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` fails closed |
+| `MOCK_LLM` | `1` | `1` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` calls Volcano Ark when a key is set |
 | `MOCK_FEISHU` | `1` | Task adapter returns in-process receipts and does not call Feishu |
 | `OPENAI_API_KEY` | unset | Required for real ASR when `MOCK_ASR=0`. Never commit a real key |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root, including `/v1`. Used only when `MOCK_ASR=0` |
 | `MEETING_ASR_MODEL` | `whisper-1` | `audio/transcriptions` model. Used only when `MOCK_ASR=0` |
+| `VOLCANO_API_KEY` | unset | Preferred key for real minutes when `MOCK_LLM=0`. Never commit a real key |
+| `ARK_API_KEY` | unset | Alias of `VOLCANO_API_KEY`. Used only when `VOLCANO_API_KEY` is unset or blank |
+| `VOLCANO_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | Ark data-plane root. The client posts `{base}/chat/completions` |
+| `ARK_BASE_URL` | same default | Alias of `VOLCANO_BASE_URL` when that variable is unset or blank |
+| `MEETING_LLM_MODEL` | `doubao-pro-32k` | Ark `model` field: a Model ID or an inference endpoint ID (`ep-...`) |
 | `MEETING_REVIEW_TOKEN_TTL_SECONDS` | `3600` | Review token lifetime |
 | `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` |
@@ -41,7 +46,23 @@ or blank `OPENAI_API_KEY` raises `ProviderNotConfigured` and does not invent
 a transcript. The default `MOCK_ASR=1` stays on the fixture even if a key is
 present.
 
-`MOCK_LLM=0` still fails closed. A real minutes model is not wired.
+Set `MOCK_LLM=0` to call Volcano Ark
+`POST https://ark.cn-beijing.volces.com/api/v3/chat/completions`. The body is
+OpenAI-compatible chat completions: `model`, `messages`, and
+`response_format.type=json_object`, with `Authorization: Bearer`. The client
+makes two calls, one for minutes and one for todos, and maps the model JSON
+onto the fixture shapes (`title`, `decisions`, `summary`, `body`, and a todo
+list of `title`, `description`, `assignee`, `due_date`, `source_quote`). A
+missing or blank key raises `ProviderNotConfigured` and does not invent
+minutes. HTTP failures and invalid or empty model JSON fail the run and do
+not fall back to the fixtures. `MOCK_LLM=1` stays on the fixtures even if a
+key is present. `VOLCANO_API_KEY` wins over `ARK_API_KEY` when both are set.
+The same preference applies to `VOLCANO_BASE_URL` and `ARK_BASE_URL`.
+
+Ark's current public model list publishes versioned Model IDs. The default
+`doubao-pro-32k` is the product model name. If the account rejects that
+name, set `MEETING_LLM_MODEL` to the enabled Model ID or endpoint ID. A
+rejected model fails the run.
 
 A Feishu write with `MOCK_FEISHU=0` and missing credentials is refused before
 any HTTP call and does not consume the review token.

@@ -79,6 +79,8 @@ def test_blank_key_is_unconfigured_and_does_not_call_http(monkeypatch):
 def test_openai_key_does_not_enable_minutes_llm(monkeypatch):
     monkeypatch.setenv("MOCK_ASR", "0")
     monkeypatch.setenv("MOCK_LLM", "0")
+    monkeypatch.delenv("VOLCANO_API_KEY", raising=False)
+    monkeypatch.delenv("ARK_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://asr.example/v1")
     monkeypatch.setenv("MEETING_ASR_MODEL", "whisper-large-v3")
