@@ -12,9 +12,23 @@
 # limitations under the License.
 # ========= Copyright 2025-2026 @ Eigent.ai All Rights Reserved. =========
 
+import base64
+
 from app.meeting.adapters.minutes_llm import UnconfiguredMinutesLLM
 from app.meeting.adapters.transcriber import UnconfiguredTranscriber
+from app.meeting.schema import sha256_bytes
 from tests.app.meeting.conftest import make_client, make_service
+
+
+class _CapturingTranscriber:
+    name = "capture"
+
+    def __init__(self) -> None:
+        self.audio: list[tuple[bytes, str]] = []
+
+    def transcribe(self, audio: bytes, *, filename: str) -> str:
+        self.audio.append((audio, filename))
+        return "captured from the microphone"
 
 
 def _states(replay):
@@ -81,6 +95,10 @@ def test_import_audio_and_live_stop_run_transcribe():
     stopped = client.post(f"/meeting/runs/{live_id}/live/stop", json={})
     assert stopped.status_code == 200
     assert stopped.json()["status"] == "awaiting_review"
+    assert stopped.json()["input"]["bytes"] == len(
+        f"mock-live:{live_id}".encode()
+    )
+    assert stopped.json()["input"]["filename"] == "live-recording.bin"
     live_states = _states(client.get(f"/meeting/runs/{live_id}/replay").json())
     assert live_states == [
         "ingesting",
@@ -88,6 +106,100 @@ def test_import_audio_and_live_stop_run_transcribe():
         "drafting",
         "awaiting_review",
     ]
+
+
+def test_live_stop_with_audio_uses_those_bytes():
+    transcriber = _CapturingTranscriber()
+    service, feishu = make_service(transcriber=transcriber)
+    client = make_client(service)
+    run_id = client.post("/meeting/runs").json()["id"]
+    started = client.post(f"/meeting/runs/{run_id}/live/start")
+    assert started.status_code == 200
+
+    raw = b"RIFF\x00live-meeting-audio"
+    stopped = client.post(
+        f"/meeting/runs/{run_id}/live/stop",
+        json={
+            "filename": "live-recording.ogg",
+            "content_base64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert stopped.status_code == 200
+    body = stopped.json()
+    assert body["status"] == "awaiting_review"
+    assert body["live_active"] is False
+    assert body["input"]["kind"] == "live_audio"
+    assert body["input"]["filename"] == "live-recording.ogg"
+    assert body["input"]["bytes"] == len(raw)
+    assert body["input"]["sha256"] == sha256_bytes(raw)
+    assert transcriber.audio == [(raw, "live-recording.ogg")]
+    assert feishu.calls == 0
+    replay = client.get(f"/meeting/runs/{run_id}/replay").json()
+    assert _states(replay) == [
+        "ingesting",
+        "transcribing",
+        "drafting",
+        "awaiting_review",
+    ]
+    assert "tool.transcribe" in [event["type"] for event in replay["events"]]
+
+
+def test_live_stop_without_audio_fails_closed_for_live_asr():
+    transcriber = _CapturingTranscriber()
+    service, feishu = make_service(transcriber=transcriber)
+    client = make_client(service)
+    run_id = client.post("/meeting/runs").json()["id"]
+    assert client.post(f"/meeting/runs/{run_id}/live/start").status_code == 200
+
+    missing = client.post(f"/meeting/runs/{run_id}/live/stop")
+    assert missing.status_code == 422
+    assert missing.json()["detail"]["error"] == "empty_audio"
+    assert "MOCK_ASR=0" in missing.json()["detail"]["message"]
+
+    empty = client.post(
+        f"/meeting/runs/{run_id}/live/stop",
+        json={"filename": "live-recording.ogg", "content_base64": ""},
+    )
+    assert empty.status_code == 422
+    assert empty.json()["detail"]["error"] == "empty_audio"
+
+    snapshot = client.get(f"/meeting/runs/{run_id}").json()
+    assert snapshot["status"] == "created"
+    assert snapshot["live_active"] is True
+    assert snapshot["transcript_sha256"] is None
+    assert snapshot["input"]["sha256"] is None
+    assert transcriber.audio == []
+    assert feishu.calls == 0
+    assert client.get(f"/meeting/runs/{run_id}/draft").status_code == 404
+
+    raw = b"ogg-audio"
+    recovered = client.post(
+        f"/meeting/runs/{run_id}/live/stop",
+        json={
+            "filename": "live-recording.ogg",
+            "content_base64": base64.b64encode(raw).decode("ascii"),
+        },
+    )
+    assert recovered.status_code == 200
+    assert recovered.json()["status"] == "awaiting_review"
+    assert transcriber.audio == [(raw, "live-recording.ogg")]
+
+
+def test_live_stop_with_audio_uses_configured_asr_failure():
+    service, feishu = make_service(transcriber=UnconfiguredTranscriber())
+    client = make_client(service)
+    run_id = client.post("/meeting/runs").json()["id"]
+    client.post(f"/meeting/runs/{run_id}/live/start")
+    stopped = client.post(
+        f"/meeting/runs/{run_id}/live/stop",
+        json={"filename": "live-recording.ogg", "content_base64": "YQ=="},
+    )
+    assert stopped.status_code == 200
+    assert stopped.json()["status"] == "failed"
+    assert stopped.json()["input"]["bytes"] == 1
+    assert "MOCK_ASR" in (stopped.json()["error"] or "")
+    assert client.get(f"/meeting/runs/{run_id}/draft").status_code == 404
+    assert feishu.calls == 0
 
 
 def test_live_stop_without_start_does_not_draft():

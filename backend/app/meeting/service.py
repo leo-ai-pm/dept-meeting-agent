@@ -240,7 +240,19 @@ class MeetingService:
                     "Live recording is not active",
                     status_code=409,
                 )
-            payload = content if content else f"mock-live:{run.id}".encode()
+            # MockTranscriber is the MOCK_ASR=1 fixture and ignores bytes.
+            # CI may stop with an empty body. A live backend must not be
+            # given invented audio that could become a transcript.
+            if content:
+                payload = content
+            elif isinstance(self.transcriber, MockTranscriber):
+                payload = f"mock-live:{run.id}".encode()
+            else:
+                raise MeetingServiceError(
+                    "empty_audio",
+                    "Live recording audio is required when MOCK_ASR=0",
+                    status_code=422,
+                )
             run.live_active = False
             self._event(
                 run,
