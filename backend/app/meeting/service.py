@@ -43,7 +43,10 @@ from app.meeting.adapters.minutes_llm import (
 )
 from app.meeting.adapters.transcriber import (
     OPENAI_ASR_MISSING_KEY,
-    VOLCANO_ASR_DEFAULT_TIMEOUT,
+    VOLCANO_ASR_DEFAULT_HTTP_TIMEOUT,
+    VOLCANO_ASR_DEFAULT_POLL_INTERVAL,
+    VOLCANO_ASR_DEFAULT_POLL_MAX_INTERVAL,
+    VOLCANO_ASR_DEFAULT_POLL_TIMEOUT,
     VOLCANO_ASR_MISSING_KEY,
     MockTranscriber,
     OpenAIWhisperTranscriber,
@@ -684,10 +687,11 @@ def _build_openai_transcriber() -> Transcriber:
 
 
 def _build_volcano_transcriber() -> Transcriber:
-    """Select 豆包语音 flash ASR.
+    """Select 豆包录音文件识别标准版 (submit, then query).
 
     ``VOLCANO_API_KEY`` is the Ark minutes key and is intentionally not
-    read here. Speech ASR uses the openspeech console key.
+    read here. Speech ASR uses the openspeech console key. The old flash
+    variable ``VOLCANO_ASR_TIMEOUT`` is not read.
     """
 
     api_key = _first_env("VOLCANO_ASR_API_KEY", "VOLCANO_OPENSPEECH_API_KEY")
@@ -703,9 +707,21 @@ def _build_volcano_transcriber() -> Transcriber:
         access_key=access_key,
         resource_id=os.environ.get("VOLCANO_ASR_RESOURCE_ID", ""),
         uid=os.environ.get("VOLCANO_ASR_UID", ""),
-        timeout=_positive_float(
-            os.environ.get("VOLCANO_ASR_TIMEOUT", ""),
-            VOLCANO_ASR_DEFAULT_TIMEOUT,
+        http_timeout=_positive_float(
+            os.environ.get("VOLCANO_ASR_HTTP_TIMEOUT", ""),
+            VOLCANO_ASR_DEFAULT_HTTP_TIMEOUT,
+        ),
+        poll_timeout=_positive_float(
+            os.environ.get("VOLCANO_ASR_POLL_TIMEOUT", ""),
+            VOLCANO_ASR_DEFAULT_POLL_TIMEOUT,
+        ),
+        poll_interval=_positive_float(
+            os.environ.get("VOLCANO_ASR_POLL_INTERVAL", ""),
+            VOLCANO_ASR_DEFAULT_POLL_INTERVAL,
+        ),
+        poll_max_interval=_positive_float(
+            os.environ.get("VOLCANO_ASR_POLL_MAX_INTERVAL", ""),
+            VOLCANO_ASR_DEFAULT_POLL_MAX_INTERVAL,
         ),
     )
 

@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 import base64
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -38,23 +40,43 @@ _AUDIO_TYPES = {
     ".wav": "audio/wav",
     ".webm": "audio/webm",
 }
-# Flash one-shot. In-process bytes go in audio.data, so no public URL is
-# required. Success is header X-Api-Status-Code 20000000 and result.text.
-# https://docs.volcengine.com/docs/6561/1631584
-VOLCANO_ASR_FLASH_URL = (
-    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+# 豆包录音文件识别标准版. Submit, then poll query. Not flash auc_turbo.
+# Submit: https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit
+# Query:  https://openspeech.bytedance.com/api/v3/auc/bigmodel/query
+# Model 2.0 resource volc.seedasr.auc. Model 1.0 is volc.bigasr.auc.
+# Header X-Api-Status-Code 20000000 is success. Query 20000001 is
+# processing and 20000002 is queued. Silence is 20000003.
+# https://docs.volcengine.com/docs/6561/1354868
+# https://docs.volcengine.com/docs/DoubaoVoice/task-submission-http-1
+# https://docs.volcengine.com/docs/DoubaoVoice/result-query-http-1
+# Inline base64 audio.data avoids a public URL. The standard field table
+# names audio.url; url and data are the two sources on this schema
+# (flash docs: 二选一, other request fields match the standard API).
+VOLCANO_ASR_SUBMIT_URL = (
+    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit"
 )
-VOLCANO_ASR_DEFAULT_RESOURCE_ID = "volc.bigasr.auc_turbo"
+VOLCANO_ASR_QUERY_URL = (
+    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/query"
+)
+VOLCANO_ASR_DEFAULT_RESOURCE_ID = "volc.seedasr.auc"
 VOLCANO_ASR_DEFAULT_UID = "dept-meeting-agent"
-VOLCANO_ASR_DEFAULT_TIMEOUT = 180.0
-VOLCANO_ASR_MAX_BYTES = 100 * 1024 * 1024
+VOLCANO_ASR_DEFAULT_HTTP_TIMEOUT = 60.0
+VOLCANO_ASR_DEFAULT_POLL_TIMEOUT = 1800.0
+VOLCANO_ASR_DEFAULT_POLL_INTERVAL = 2.0
+VOLCANO_ASR_DEFAULT_POLL_MAX_INTERVAL = 15.0
+VOLCANO_ASR_MAX_BYTES = 512 * 1024 * 1024
 VOLCANO_ASR_SUCCESS_CODE = "20000000"
+VOLCANO_ASR_PENDING_CODES = frozenset({"20000001", "20000002"})
 _DOUBAO_FAIL = "Doubao ASR failed: "
 _VOLCANO_AUDIO_FORMATS = {
     ".wav": ("wav", ""),
     ".mp3": ("mp3", ""),
     ".ogg": ("ogg", "opus"),
     ".opus": ("ogg", "opus"),
+    ".spx": ("spx", ""),
+    ".amr": ("amr", ""),
+    ".aac": ("aac", ""),
+    ".m4a": ("m4a", ""),
 }
 VOLCANO_ASR_MISSING_KEY = (
     "豆包语音 ASR 未配置 / Doubao speech ASR is not configured. "
@@ -201,11 +223,12 @@ def _transcript_from_json(response: httpx.Response) -> str:
 
 
 class VolcanoDoubaoTranscriber:
-    """Volcano openspeech flash ASR (豆包语音录音文件极速版).
+    """Volcano openspeech standard ASR (豆包录音文件识别标准版).
 
-    Posts in-process audio as base64 ``audio.data``. The speech API Key
-    is supplied by the caller and is not the Ark minutes key. This class
-    does not read a fixture and does not log the key.
+    Submits in-process audio as base64 ``audio.data``, then polls the
+    query endpoint. The speech API Key is supplied by the caller and is
+    not the Ark minutes key. This class does not read a fixture and does
+    not log the key.
     """
 
     name = "volcano_doubao"
@@ -218,10 +241,16 @@ class VolcanoDoubaoTranscriber:
         access_key: str = "",
         resource_id: str = "",
         uid: str = "",
-        url: str = "",
+        submit_url: str = "",
+        query_url: str = "",
         client: httpx.Client | None = None,
-        timeout: float = VOLCANO_ASR_DEFAULT_TIMEOUT,
+        http_timeout: float = VOLCANO_ASR_DEFAULT_HTTP_TIMEOUT,
+        poll_timeout: float = VOLCANO_ASR_DEFAULT_POLL_TIMEOUT,
+        poll_interval: float = VOLCANO_ASR_DEFAULT_POLL_INTERVAL,
+        poll_max_interval: float = VOLCANO_ASR_DEFAULT_POLL_MAX_INTERVAL,
         max_bytes: int = VOLCANO_ASR_MAX_BYTES,
+        clock: Callable[[], float] | None = None,
+        sleeper: Callable[[float], None] | None = None,
     ) -> None:
         self._api_key = api_key.strip()
         self._app_key = app_key.strip()
@@ -230,14 +259,28 @@ class VolcanoDoubaoTranscriber:
             resource_id.strip() or VOLCANO_ASR_DEFAULT_RESOURCE_ID
         )
         self._uid = uid.strip() or VOLCANO_ASR_DEFAULT_UID
-        self._url = url.strip() or VOLCANO_ASR_FLASH_URL
-        if timeout is None or timeout <= 0:
-            timeout = VOLCANO_ASR_DEFAULT_TIMEOUT
-        self._timeout = timeout
+        self._submit_url = submit_url.strip() or VOLCANO_ASR_SUBMIT_URL
+        self._query_url = query_url.strip() or VOLCANO_ASR_QUERY_URL
+        self._http_timeout = _positive_number(
+            http_timeout, VOLCANO_ASR_DEFAULT_HTTP_TIMEOUT
+        )
+        self._poll_timeout = _positive_number(
+            poll_timeout, VOLCANO_ASR_DEFAULT_POLL_TIMEOUT
+        )
+        self._poll_interval = _positive_number(
+            poll_interval, VOLCANO_ASR_DEFAULT_POLL_INTERVAL
+        )
+        self._poll_max_interval = _positive_number(
+            poll_max_interval, VOLCANO_ASR_DEFAULT_POLL_MAX_INTERVAL
+        )
+        if self._poll_max_interval < self._poll_interval:
+            self._poll_max_interval = self._poll_interval
         if max_bytes is None or max_bytes <= 0:
             max_bytes = VOLCANO_ASR_MAX_BYTES
         self._max_bytes = max_bytes
-        self._client = client or httpx.Client(timeout=self._timeout)
+        self._clock = clock or time.monotonic
+        self._sleeper = sleeper or time.sleep
+        self._client = client or httpx.Client(timeout=self._http_timeout)
 
     def transcribe(self, audio: bytes, *, filename: str) -> str:
         self._require_credentials()
@@ -246,28 +289,32 @@ class VolcanoDoubaoTranscriber:
         if len(audio) > self._max_bytes:
             raise RuntimeError(
                 _DOUBAO_FAIL
-                + "audio exceeds the flash limit of "
-                + _flash_limit(self._max_bytes)
+                + "audio exceeds the standard limit of "
+                + _byte_limit(self._max_bytes)
             )
         request_id = str(uuid.uuid4())
+        self._submit(request_id, audio, filename)
+        return self._poll(request_id)
+
+    def _submit(self, request_id: str, audio: bytes, filename: str) -> None:
         try:
             response = self._client.post(
-                self._url,
-                headers=self._headers(request_id),
+                self._submit_url,
+                headers=self._headers(request_id, sequence=True),
                 json=self._payload(audio, filename),
             )
         except httpx.HTTPError as exc:
-            detail = _redact_secrets(
-                " ".join(str(exc).split()), self._secrets()
-            )
-            raise RuntimeError(_DOUBAO_FAIL + detail) from None
+            raise RuntimeError(self._transport_error(exc)) from None
         payload = _optional_json(response)
         status = _api_status(response, payload)
         logid = response.headers.get("X-Tt-Logid", "").strip()
-        if response.status_code >= 400 or (
-            status and status != VOLCANO_ASR_SUCCESS_CODE
-        ):
-            detail = _status_detail(response, payload)
+        if response.status_code >= 400 or status != VOLCANO_ASR_SUCCESS_CODE:
+            # Do not echo a nested result.text. A submit body is not a
+            # transcript, and a missing status is not success.
+            if not status and response.status_code < 400:
+                detail = "submit missing X-Api-Status-Code"
+            else:
+                detail = _status_detail(response, payload)
             raise RuntimeError(
                 _failure_message(
                     response.status_code,
@@ -277,14 +324,92 @@ class VolcanoDoubaoTranscriber:
                     self._secrets(),
                 )
             )
-        if payload is None:
-            raise RuntimeError(
-                _with_logid(_DOUBAO_FAIL + "response was not JSON", logid)
-            )
-        try:
-            return _transcript_from_payload(payload)
-        except RuntimeError as exc:
-            raise RuntimeError(_with_logid(str(exc), logid)) from None
+
+    def _poll(self, request_id: str) -> str:
+        deadline = self._clock() + self._poll_timeout
+        interval = self._poll_interval
+        headers = self._headers(request_id, sequence=False)
+        transport_error = ""
+        while True:
+            try:
+                response = self._client.post(
+                    self._query_url,
+                    headers=headers,
+                    json={},
+                )
+            except httpx.HTTPError as exc:
+                transport_error = self._transport_error(exc).removeprefix(
+                    _DOUBAO_FAIL
+                )
+                self._wait_or_timeout(deadline, interval, transport_error, "")
+                interval = self._next_interval(interval)
+                continue
+            payload = _optional_json(response)
+            status = _api_status(response, payload)
+            logid = response.headers.get("X-Tt-Logid", "").strip()
+            if (
+                status in VOLCANO_ASR_PENDING_CODES
+                and response.status_code < 400
+            ):
+                self._wait_or_timeout(deadline, interval, "", logid)
+                interval = self._next_interval(interval)
+                continue
+            if response.status_code >= 400 or (
+                status and status != VOLCANO_ASR_SUCCESS_CODE
+            ):
+                detail = _status_detail(response, payload)
+                raise RuntimeError(
+                    _failure_message(
+                        response.status_code,
+                        status,
+                        detail,
+                        logid,
+                        self._secrets(),
+                    )
+                )
+            if payload is None:
+                raise RuntimeError(
+                    _with_logid(_DOUBAO_FAIL + "response was not JSON", logid)
+                )
+            try:
+                return _transcript_from_payload(payload)
+            except RuntimeError as exc:
+                raise RuntimeError(_with_logid(str(exc), logid)) from None
+
+    def _wait_or_timeout(
+        self,
+        deadline: float,
+        interval: float,
+        transport_error: str,
+        logid: str,
+    ) -> None:
+        now = self._clock()
+        if now >= deadline:
+            self._raise_timeout(transport_error, logid)
+        delay = min(interval, deadline - now)
+        if delay <= 0:
+            self._raise_timeout(transport_error, logid)
+        self._sleeper(delay)
+
+    def _next_interval(self, interval: float) -> float:
+        return min(interval * 2, self._poll_max_interval)
+
+    def _raise_timeout(self, transport_error: str, logid: str) -> None:
+        message = (
+            _DOUBAO_FAIL
+            + "query timed out after "
+            + _format_seconds(self._poll_timeout)
+            + "s"
+        )
+        if transport_error:
+            message = f"{message}: {transport_error}"
+        raise RuntimeError(
+            _with_logid(message, _redact_secrets(logid, self._secrets()))
+        )
+
+    def _transport_error(self, exc: BaseException) -> str:
+        detail = _redact_secrets(" ".join(str(exc).split()), self._secrets())
+        return _DOUBAO_FAIL + detail
 
     def _require_credentials(self) -> None:
         if self._api_key:
@@ -296,13 +421,14 @@ class VolcanoDoubaoTranscriber:
     def _secrets(self) -> list[str]:
         return [self._api_key, self._app_key, self._access_key]
 
-    def _headers(self, request_id: str) -> dict[str, str]:
+    def _headers(self, request_id: str, *, sequence: bool) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "X-Api-Resource-Id": self._resource_id,
             "X-Api-Request-Id": request_id,
-            "X-Api-Sequence": "-1",
         }
+        if sequence:
+            headers["X-Api-Sequence"] = "-1"
         if self._api_key:
             headers["X-Api-Key"] = self._api_key
         else:
@@ -331,9 +457,27 @@ def _volcano_format(filename: str) -> tuple[str, str]:
     return _VOLCANO_AUDIO_FORMATS.get(suffix, ("", ""))
 
 
-def _flash_limit(max_bytes: int) -> str:
+def _positive_number(value: float | None, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number <= 0:
+        return default
+    return number
+
+
+def _format_seconds(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+    return str(value)
+
+
+def _byte_limit(max_bytes: int) -> str:
     if max_bytes == VOLCANO_ASR_MAX_BYTES:
-        return "100MB"
+        return "512MB"
     return f"{max_bytes} bytes"
 
 
