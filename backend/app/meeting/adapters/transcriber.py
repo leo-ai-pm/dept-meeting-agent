@@ -14,8 +14,10 @@
 
 from __future__ import annotations
 
+import base64
+import uuid
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -36,7 +38,34 @@ _AUDIO_TYPES = {
     ".wav": "audio/wav",
     ".webm": "audio/webm",
 }
-_MISSING_KEY = (
+# Flash one-shot. In-process bytes go in audio.data, so no public URL is
+# required. Success is header X-Api-Status-Code 20000000 and result.text.
+# https://docs.volcengine.com/docs/6561/1631584
+VOLCANO_ASR_FLASH_URL = (
+    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+)
+VOLCANO_ASR_DEFAULT_RESOURCE_ID = "volc.bigasr.auc_turbo"
+VOLCANO_ASR_DEFAULT_UID = "dept-meeting-agent"
+VOLCANO_ASR_DEFAULT_TIMEOUT = 180.0
+VOLCANO_ASR_MAX_BYTES = 100 * 1024 * 1024
+VOLCANO_ASR_SUCCESS_CODE = "20000000"
+_DOUBAO_FAIL = "Doubao ASR failed: "
+_VOLCANO_AUDIO_FORMATS = {
+    ".wav": ("wav", ""),
+    ".mp3": ("mp3", ""),
+    ".ogg": ("ogg", "opus"),
+    ".opus": ("ogg", "opus"),
+}
+VOLCANO_ASR_MISSING_KEY = (
+    "豆包语音 ASR 未配置 / Doubao speech ASR is not configured. "
+    "Set MOCK_ASR=1, or set VOLCANO_ASR_API_KEY from the "
+    "豆包语音控制台 (Volcano openspeech, "
+    "https://openspeech.bytedance.com). "
+    "VOLCANO_API_KEY is the Ark minutes key and is not an "
+    "openspeech speech key. Older consoles may set "
+    "VOLCANO_ASR_APP_KEY and VOLCANO_ASR_ACCESS_KEY together."
+)
+OPENAI_ASR_MISSING_KEY = (
     "ASR provider is not configured. Set MOCK_ASR=1 or "
     "OPENAI_API_KEY for OpenAI Whisper."
 )
@@ -68,9 +97,12 @@ class MockTranscriber:
 class UnconfiguredTranscriber:
     name = "unconfigured"
 
+    def __init__(self, message: str | None = None) -> None:
+        self._message = message or VOLCANO_ASR_MISSING_KEY
+
     def transcribe(self, audio: bytes, *, filename: str) -> str:
         del audio, filename
-        raise ProviderNotConfigured(_MISSING_KEY)
+        raise ProviderNotConfigured(self._message)
 
 
 class OpenAIWhisperTranscriber:
@@ -99,7 +131,7 @@ class OpenAIWhisperTranscriber:
 
     def transcribe(self, audio: bytes, *, filename: str) -> str:
         if not self._api_key:
-            raise ProviderNotConfigured(_MISSING_KEY)
+            raise ProviderNotConfigured(OPENAI_ASR_MISSING_KEY)
         safe_name = _audio_filename(filename)
         response = self._client.post(
             self._url,
@@ -166,6 +198,294 @@ def _transcript_from_json(response: httpx.Response) -> str:
             "Whisper transcription failed: response missing transcript text"
         )
     return text
+
+
+class VolcanoDoubaoTranscriber:
+    """Volcano openspeech flash ASR (豆包语音录音文件极速版).
+
+    Posts in-process audio as base64 ``audio.data``. The speech API Key
+    is supplied by the caller and is not the Ark minutes key. This class
+    does not read a fixture and does not log the key.
+    """
+
+    name = "volcano_doubao"
+
+    def __init__(
+        self,
+        *,
+        api_key: str = "",
+        app_key: str = "",
+        access_key: str = "",
+        resource_id: str = "",
+        uid: str = "",
+        url: str = "",
+        client: httpx.Client | None = None,
+        timeout: float = VOLCANO_ASR_DEFAULT_TIMEOUT,
+        max_bytes: int = VOLCANO_ASR_MAX_BYTES,
+    ) -> None:
+        self._api_key = api_key.strip()
+        self._app_key = app_key.strip()
+        self._access_key = access_key.strip()
+        self._resource_id = (
+            resource_id.strip() or VOLCANO_ASR_DEFAULT_RESOURCE_ID
+        )
+        self._uid = uid.strip() or VOLCANO_ASR_DEFAULT_UID
+        self._url = url.strip() or VOLCANO_ASR_FLASH_URL
+        if timeout is None or timeout <= 0:
+            timeout = VOLCANO_ASR_DEFAULT_TIMEOUT
+        self._timeout = timeout
+        if max_bytes is None or max_bytes <= 0:
+            max_bytes = VOLCANO_ASR_MAX_BYTES
+        self._max_bytes = max_bytes
+        self._client = client or httpx.Client(timeout=self._timeout)
+
+    def transcribe(self, audio: bytes, *, filename: str) -> str:
+        self._require_credentials()
+        if not audio:
+            raise RuntimeError(_DOUBAO_FAIL + "audio is empty")
+        if len(audio) > self._max_bytes:
+            raise RuntimeError(
+                _DOUBAO_FAIL
+                + "audio exceeds the flash limit of "
+                + _flash_limit(self._max_bytes)
+            )
+        request_id = str(uuid.uuid4())
+        try:
+            response = self._client.post(
+                self._url,
+                headers=self._headers(request_id),
+                json=self._payload(audio, filename),
+            )
+        except httpx.HTTPError as exc:
+            detail = _redact_secrets(
+                " ".join(str(exc).split()), self._secrets()
+            )
+            raise RuntimeError(_DOUBAO_FAIL + detail) from None
+        payload = _optional_json(response)
+        status = _api_status(response, payload)
+        logid = response.headers.get("X-Tt-Logid", "").strip()
+        if response.status_code >= 400 or (
+            status and status != VOLCANO_ASR_SUCCESS_CODE
+        ):
+            detail = _status_detail(response, payload)
+            raise RuntimeError(
+                _failure_message(
+                    response.status_code,
+                    status,
+                    detail,
+                    logid,
+                    self._secrets(),
+                )
+            )
+        if payload is None:
+            raise RuntimeError(
+                _with_logid(_DOUBAO_FAIL + "response was not JSON", logid)
+            )
+        try:
+            return _transcript_from_payload(payload)
+        except RuntimeError as exc:
+            raise RuntimeError(_with_logid(str(exc), logid)) from None
+
+    def _require_credentials(self) -> None:
+        if self._api_key:
+            return
+        if self._app_key and self._access_key:
+            return
+        raise ProviderNotConfigured(VOLCANO_ASR_MISSING_KEY)
+
+    def _secrets(self) -> list[str]:
+        return [self._api_key, self._app_key, self._access_key]
+
+    def _headers(self, request_id: str) -> dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Resource-Id": self._resource_id,
+            "X-Api-Request-Id": request_id,
+            "X-Api-Sequence": "-1",
+        }
+        if self._api_key:
+            headers["X-Api-Key"] = self._api_key
+        else:
+            headers["X-Api-App-Key"] = self._app_key
+            headers["X-Api-Access-Key"] = self._access_key
+        return headers
+
+    def _payload(self, audio: bytes, filename: str) -> dict[str, Any]:
+        audio_body: dict[str, Any] = {
+            "data": base64.b64encode(audio).decode("ascii"),
+        }
+        audio_format, codec = _volcano_format(filename)
+        if audio_format:
+            audio_body["format"] = audio_format
+        if codec:
+            audio_body["codec"] = codec
+        return {
+            "user": {"uid": self._uid},
+            "audio": audio_body,
+            "request": {"model_name": "bigmodel"},
+        }
+
+
+def _volcano_format(filename: str) -> tuple[str, str]:
+    suffix = Path(_audio_filename(filename)).suffix.lower()
+    return _VOLCANO_AUDIO_FORMATS.get(suffix, ("", ""))
+
+
+def _flash_limit(max_bytes: int) -> str:
+    if max_bytes == VOLCANO_ASR_MAX_BYTES:
+        return "100MB"
+    return f"{max_bytes} bytes"
+
+
+def _optional_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
+def _api_status(response: httpx.Response, payload: Any) -> str:
+    header = response.headers.get("X-Api-Status-Code", "").strip()
+    if header:
+        return header
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("code", "status_code"):
+        value = payload.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str) and value.strip().isdigit():
+            return value.strip()
+    return ""
+
+
+def _status_detail(response: httpx.Response, payload: Any) -> str:
+    message = response.headers.get("X-Api-Message", "").strip()
+    if message and message.upper() != "OK":
+        return message
+    body_message = _body_message(payload)
+    if body_message and body_message.upper() != "OK":
+        return body_message
+    return response.text or ""
+
+
+def _body_message(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("message", "msg"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    error = payload.get("error")
+    if isinstance(error, dict):
+        nested = error.get("message")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    if isinstance(error, str) and error.strip():
+        return error.strip()
+    return ""
+
+
+def _failure_message(
+    http_status: int,
+    status: str,
+    detail: str,
+    logid: str,
+    secrets: list[str],
+) -> str:
+    bits: list[str] = []
+    if http_status >= 400:
+        bits.append(f"HTTP {http_status}")
+    if status:
+        bits.append(f"status {status}")
+    head = ", ".join(bits) if bits else "request failed"
+    message = _DOUBAO_FAIL + head
+    cleaned = _redact_secrets(" ".join((detail or "").split()), secrets)
+    if cleaned:
+        message = f"{message}: {cleaned[:300]}"
+    return _with_logid(message, _redact_secrets(logid, secrets))
+
+
+def _with_logid(message: str, logid: str) -> str:
+    if logid:
+        return f"{message} [logid={logid}]"
+    return message
+
+
+def _transcript_from_payload(payload: Any) -> str:
+    if isinstance(payload, dict):
+        text = _text_from_node(_result_node(payload))
+        if text:
+            return text
+        top = payload.get("text")
+        if isinstance(top, str) and top.strip():
+            return top
+    elif isinstance(payload, list):
+        text = _text_from_node(payload)
+        if text:
+            return text
+    raise RuntimeError(_DOUBAO_FAIL + "response missing transcript text")
+
+
+def _result_node(payload: dict[str, Any]) -> Any:
+    if "result" in payload:
+        return payload.get("result")
+    body = payload.get("body")
+    if isinstance(body, dict) and "result" in body:
+        return body.get("result")
+    return None
+
+
+def _text_from_node(node: Any) -> str | None:
+    if isinstance(node, str):
+        stripped = node.strip()
+        return node if stripped else None
+    if isinstance(node, dict):
+        text = node.get("text")
+        if isinstance(text, str) and text.strip():
+            return text
+        joined = _join_utterances(node.get("utterances"))
+        if joined:
+            return joined
+        return None
+    if isinstance(node, list):
+        parts: list[str] = []
+        for item in node:
+            piece = _text_from_node(item)
+            if piece:
+                parts.append(piece)
+        if parts:
+            return "".join(parts)
+        return None
+    return None
+
+
+def _join_utterances(utterances: Any) -> str:
+    if not isinstance(utterances, list):
+        return ""
+    parts: list[str] = []
+    for item in utterances:
+        if isinstance(item, str):
+            piece = item.strip()
+        elif isinstance(item, dict) and isinstance(item.get("text"), str):
+            piece = item["text"].strip()
+        else:
+            piece = ""
+        if piece:
+            parts.append(piece)
+    return "".join(parts)
+
+
+def _redact_secrets(text: str, secrets: list[str]) -> str:
+    if not text:
+        return ""
+    redacted = text
+    for secret in secrets:
+        if secret:
+            redacted = redacted.replace(secret, "[redacted]")
+    return redacted
 
 
 def _error_detail(response: httpx.Response, api_key: str) -> str:

@@ -42,10 +42,14 @@ from app.meeting.adapters.minutes_llm import (
     VolcanoMinutesLLM,
 )
 from app.meeting.adapters.transcriber import (
+    OPENAI_ASR_MISSING_KEY,
+    VOLCANO_ASR_DEFAULT_TIMEOUT,
+    VOLCANO_ASR_MISSING_KEY,
     MockTranscriber,
     OpenAIWhisperTranscriber,
     Transcriber,
     UnconfiguredTranscriber,
+    VolcanoDoubaoTranscriber,
 )
 from app.meeting.errors import HardReject, MeetingServiceError
 from app.meeting.review_token import (
@@ -646,12 +650,30 @@ class MeetingService:
         }
 
 
+_OPENAI_ASR_BACKENDS = frozenset({"openai", "whisper"})
+_VOLCANO_ASR_BACKENDS = frozenset({"volcano"})
+
+
 def _build_transcriber() -> Transcriber:
     if env_flag("MOCK_ASR", "1"):
         return MockTranscriber()
+    backend = os.environ.get("ASR_BACKEND", "volcano").strip().lower()
+    backend = backend or "volcano"
+    if backend in _OPENAI_ASR_BACKENDS:
+        return _build_openai_transcriber()
+    if backend in _VOLCANO_ASR_BACKENDS:
+        return _build_volcano_transcriber()
+    shown = backend[:80]
+    return UnconfiguredTranscriber(
+        "ASR_BACKEND must be volcano (default), openai, or whisper. "
+        f"Got {shown!r}. Set MOCK_ASR=1 to use the fixture."
+    )
+
+
+def _build_openai_transcriber() -> Transcriber:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
-        return UnconfiguredTranscriber()
+        return UnconfiguredTranscriber(OPENAI_ASR_MISSING_KEY)
     base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
     model = os.environ.get("MEETING_ASR_MODEL", "").strip()
     return OpenAIWhisperTranscriber(
@@ -659,6 +681,46 @@ def _build_transcriber() -> Transcriber:
         base_url=base_url or "https://api.openai.com/v1",
         model=model or "whisper-1",
     )
+
+
+def _build_volcano_transcriber() -> Transcriber:
+    """Select 豆包语音 flash ASR.
+
+    ``VOLCANO_API_KEY`` is the Ark minutes key and is intentionally not
+    read here. Speech ASR uses the openspeech console key.
+    """
+
+    api_key = _first_env("VOLCANO_ASR_API_KEY", "VOLCANO_OPENSPEECH_API_KEY")
+    app_key = _first_env("VOLCANO_ASR_APP_KEY", "VOLCANO_ASR_APP_ID")
+    access_key = _first_env(
+        "VOLCANO_ASR_ACCESS_KEY", "VOLCANO_ASR_ACCESS_TOKEN"
+    )
+    if not api_key and not (app_key and access_key):
+        return UnconfiguredTranscriber(VOLCANO_ASR_MISSING_KEY)
+    return VolcanoDoubaoTranscriber(
+        api_key=api_key,
+        app_key=app_key,
+        access_key=access_key,
+        resource_id=os.environ.get("VOLCANO_ASR_RESOURCE_ID", ""),
+        uid=os.environ.get("VOLCANO_ASR_UID", ""),
+        timeout=_positive_float(
+            os.environ.get("VOLCANO_ASR_TIMEOUT", ""),
+            VOLCANO_ASR_DEFAULT_TIMEOUT,
+        ),
+    )
+
+
+def _positive_float(raw: str, default: float) -> float:
+    text = (raw or "").strip()
+    if not text:
+        return default
+    try:
+        value = float(text)
+    except ValueError:
+        return default
+    if value <= 0:
+        return default
+    return value
 
 
 def _first_env(*names: str) -> str:
