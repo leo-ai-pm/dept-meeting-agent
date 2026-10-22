@@ -30,8 +30,9 @@ _TODOS = _ROOT / "todos.json"
 # Data-plane root from the Ark OpenAI-compatible docs. The chat method is
 # POST {base}/chat/completions. Do not use the control-plane host.
 VOLCANO_DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-VOLCANO_DEFAULT_MODEL = "doubao-pro-32k"
-_DEFAULT_TIMEOUT = 120.0
+VOLCANO_DEFAULT_MODEL = "doubao-seed-2-1-turbo-260628"
+# Deep-thinking replies can run past two minutes.
+_DEFAULT_TIMEOUT = 180.0
 _DECISION_MIN = 3
 _DECISION_MAX = 5
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
