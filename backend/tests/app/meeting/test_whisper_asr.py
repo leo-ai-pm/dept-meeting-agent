@@ -43,17 +43,34 @@ def test_mock_asr_stays_default_when_openai_key_is_set(monkeypatch):
 
 def test_missing_key_with_mock_asr_off_does_not_invent_transcript(monkeypatch):
     monkeypatch.setenv("MOCK_ASR", "0")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ASR_BACKEND", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("VOLCANO_API_KEY", "ark-minutes-key")
+    for name in (
+        "VOLCANO_ASR_API_KEY",
+        "VOLCANO_OPENSPEECH_API_KEY",
+        "VOLCANO_ASR_APP_KEY",
+        "VOLCANO_ASR_APP_ID",
+        "VOLCANO_ASR_ACCESS_KEY",
+        "VOLCANO_ASR_ACCESS_TOKEN",
+    ):
+        monkeypatch.delenv(name, raising=False)
     service = build_meeting_service()
     assert service.transcriber.name == "unconfigured"
     run = service.create_run()
     result = service.import_audio(
         run["id"], filename="clip.wav", content=b"abc"
     )
+    error = result["error"] or ""
     assert result["status"] == "failed"
     assert result["transcript_sha256"] is None
-    assert "MOCK_ASR" in (result["error"] or "")
-    assert _FIXTURE_MARK not in (result["error"] or "")
+    assert "MOCK_ASR" in error
+    assert "豆包语音" in error
+    assert "openspeech" in error
+    assert "OPENAI_API_KEY" not in error
+    assert "ark-minutes-key" not in error
+    assert "sk-test" not in error
+    assert _FIXTURE_MARK not in error
     with pytest.raises(MeetingServiceError) as raised:
         service.get_draft(run["id"])
     assert raised.value.status_code == 404
@@ -61,7 +78,9 @@ def test_missing_key_with_mock_asr_off_does_not_invent_transcript(monkeypatch):
 
 def test_blank_key_is_unconfigured_and_does_not_call_http(monkeypatch):
     monkeypatch.setenv("MOCK_ASR", "0")
+    monkeypatch.setenv("ASR_BACKEND", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "   ")
+    monkeypatch.setenv("VOLCANO_ASR_API_KEY", "speech-key-not-used")
     service = build_meeting_service()
     assert service.transcriber.name == "unconfigured"
 
@@ -78,6 +97,7 @@ def test_blank_key_is_unconfigured_and_does_not_call_http(monkeypatch):
 
 def test_openai_key_does_not_enable_minutes_llm(monkeypatch):
     monkeypatch.setenv("MOCK_ASR", "0")
+    monkeypatch.setenv("ASR_BACKEND", "whisper")
     monkeypatch.setenv("MOCK_LLM", "0")
     monkeypatch.delenv("VOLCANO_API_KEY", raising=False)
     monkeypatch.delenv("ARK_API_KEY", raising=False)
@@ -225,6 +245,7 @@ def test_connection_error_does_not_fall_back_to_fixture():
 
 def test_default_whisper_target_when_optional_env_is_blank(monkeypatch):
     monkeypatch.setenv("MOCK_ASR", "0")
+    monkeypatch.setenv("ASR_BACKEND", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("OPENAI_BASE_URL", "  ")
     monkeypatch.setenv("MEETING_ASR_MODEL", "")

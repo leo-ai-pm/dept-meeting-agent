@@ -23,12 +23,20 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls OpenAI Whisper when `OPENAI_API_KEY` is set |
+| `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls the live ASR backend |
+| `ASR_BACKEND` | `volcano` | Live backend when `MOCK_ASR=0`. `volcano` calls 豆包语音 flash ASR. `openai` or `whisper` calls OpenAI Whisper |
+| `VOLCANO_ASR_API_KEY` | unset | Preferred 豆包语音控制台 API Key (`X-Api-Key`). Not the Ark minutes key. Never commit a real key |
+| `VOLCANO_OPENSPEECH_API_KEY` | unset | Alias of `VOLCANO_ASR_API_KEY` when that variable is unset or blank |
+| `VOLCANO_ASR_APP_KEY` | unset | Older-console APP ID (`X-Api-App-Key`). Used only when the speech API Key is unset. `VOLCANO_ASR_APP_ID` is an alias |
+| `VOLCANO_ASR_ACCESS_KEY` | unset | Older-console Access Token (`X-Api-Access-Key`). Must be set with the APP ID. `VOLCANO_ASR_ACCESS_TOKEN` is an alias |
+| `VOLCANO_ASR_RESOURCE_ID` | `volc.bigasr.auc_turbo` | Flash resource ID. The speech account must have this resource enabled |
+| `VOLCANO_ASR_UID` | `dept-meeting-agent` | `user.uid` sent with the request. Not a secret |
+| `VOLCANO_ASR_TIMEOUT` | `180` | HTTP timeout in seconds for the synchronous flash call |
 | `MOCK_LLM` | `1` | `1` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` calls Volcano Ark when a key is set |
 | `MOCK_FEISHU` | `1` | `1` returns in-process receipts. `0` writes one Feishu task per todo through `lark-cli` |
-| `OPENAI_API_KEY` | unset | Required for real ASR when `MOCK_ASR=0`. Never commit a real key |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root, including `/v1`. Used only when `MOCK_ASR=0` |
-| `MEETING_ASR_MODEL` | `whisper-1` | `audio/transcriptions` model. Used only when `MOCK_ASR=0` |
+| `OPENAI_API_KEY` | unset | Required only when `MOCK_ASR=0` and `ASR_BACKEND` is `openai` or `whisper`. Never commit a real key |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root, including `/v1`. Whisper path only |
+| `MEETING_ASR_MODEL` | `whisper-1` | `audio/transcriptions` model. Whisper path only |
 | `VOLCANO_API_KEY` | unset | Preferred key for real minutes when `MOCK_LLM=0`. Never commit a real key |
 | `ARK_API_KEY` | unset | Alias of `VOLCANO_API_KEY`. Used only when `VOLCANO_API_KEY` is unset or blank |
 | `VOLCANO_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | Ark data-plane root. The client posts `{base}/chat/completions` |
@@ -41,12 +49,45 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` and `FEISHU_BACKEND=enterprise`. Not read by the lark-cli path |
 | `FEISHU_API_BASE` | `https://open.feishu.cn` | Feishu Open API origin. Enterprise backend only |
 
-Set `MOCK_ASR=0` to call OpenAI `POST /audio/transcriptions`. The request
-sends the audio file and `MEETING_ASR_MODEL` with `Authorization: Bearer`.
-`OPENAI_BASE_URL` may point at any compatible OpenAI-HTTP endpoint. A missing
-or blank `OPENAI_API_KEY` raises `ProviderNotConfigured` and does not invent
-a transcript. The default `MOCK_ASR=1` stays on the fixture even if a key is
-present.
+Set `MOCK_ASR=0` to call a live ASR backend. The default is Volcano Doubao
+speech recognition (豆包语音), not OpenAI Whisper. `ASR_BACKEND=volcano`
+posts in-process audio to the flash one-shot endpoint:
+
+`POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash`
+
+The request is JSON. `audio.data` is standard base64 of the uploaded bytes,
+so the file does not need a public URL. `audio.url` is not used. A filename
+suffix of wav, mp3, or ogg/opus is sent as `audio.format` (`ogg` also sets
+`codec` to `opus`). The body also sends `user.uid` and
+`request.model_name=bigmodel`. Headers are `X-Api-Resource-Id`
+(default `volc.bigasr.auc_turbo`), `X-Api-Request-Id` (a new UUID), and
+`X-Api-Sequence: -1`. The new speech console authenticates with `X-Api-Key`.
+An older console can omit that key and set `X-Api-App-Key` plus
+`X-Api-Access-Key` instead. When `VOLCANO_ASR_API_KEY` is set, the older
+pair is not sent.
+
+This key comes from the 豆包语音控制台 (openspeech). It is a different
+product from the Ark chat key. `VOLCANO_API_KEY` / `ARK_API_KEY` stay on
+the minutes path and are not tried as a speech key. A missing or blank
+speech key raises `ProviderNotConfigured` and does not invent a transcript.
+The message points at the 豆包语音控制台, not at OpenAI.
+
+Flash accepts wav, mp3, and ogg opus, up to about 100MB and 2 hours.
+Longer recordings need the standard submit-and-query API, which this slice
+does not call. Volcano also recommends keeping a raw binary upload near
+20MB because of egress bandwidth; the hard cap enforced here is 100MB.
+A successful call returns `X-Api-Status-Code: 20000000` and
+`result.text`. Other status codes, including silence `20000003`, fail the
+run. The client does not substitute `fixtures/transcript.txt`.
+
+`ASR_BACKEND=openai` or `ASR_BACKEND=whisper` keeps the OpenAI path:
+`POST /audio/transcriptions` with the audio file, `MEETING_ASR_MODEL`, and
+`Authorization: Bearer`. `OPENAI_BASE_URL` may point at any compatible
+OpenAI-HTTP endpoint. A missing or blank `OPENAI_API_KEY` on that path
+raises `ProviderNotConfigured` and does not invent a transcript. The
+default `MOCK_ASR=1` stays on the fixture even if a speech key or an
+OpenAI key is present. Doubao flash ASR waits `VOLCANO_ASR_TIMEOUT`
+seconds (default 180). Whisper keeps its own 120 second timeout.
 
 Set `MOCK_LLM=0` to call Volcano Ark
 `POST https://ark.cn-beijing.volces.com/api/v3/chat/completions`. The body is
@@ -66,7 +107,7 @@ The default model is the activated Ark Model ID
 to use that ID. Set `MEETING_LLM_MODEL` to another Model ID or an inference
 endpoint ID (`ep-...`) to override it. A rejected model fails the run.
 Deep-thinking replies can run past two minutes, so the minutes client
-waits 180 seconds. Whisper ASR and Feishu keep their own timeouts.
+waits 180 seconds. Feishu keeps its own timeout.
 
 Set `MOCK_FEISHU=0` to create one Feishu task per approved todo with the
 official Lark/Feishu CLI (`lark-cli`, npm package `@larksuite/cli`). Install

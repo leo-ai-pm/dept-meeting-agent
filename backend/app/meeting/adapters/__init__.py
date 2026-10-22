@@ -32,6 +32,7 @@ from app.meeting.adapters.transcriber import (
     OpenAIWhisperTranscriber,
     Transcriber,
     UnconfiguredTranscriber,
+    VolcanoDoubaoTranscriber,
 )
 
 __all__ = [
@@ -47,5 +48,6 @@ __all__ = [
     "Transcriber",
     "UnconfiguredMinutesLLM",
     "UnconfiguredTranscriber",
+    "VolcanoDoubaoTranscriber",
     "VolcanoMinutesLLM",
 ]
