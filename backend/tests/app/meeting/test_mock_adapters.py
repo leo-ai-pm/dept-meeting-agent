@@ -266,3 +266,57 @@ def test_enterprise_adapter_does_not_retry_4xx():
     assert posts["task"] == 1
     assert receipts[0]["ok"] is False
     assert "forbidden" in receipts[0]["error"]
+
+
+def test_mock_feishu_off_defaults_to_lark_cli_without_app_secret(monkeypatch):
+    monkeypatch.setenv("MOCK_FEISHU", "0")
+    monkeypatch.delenv("FEISHU_BACKEND", raising=False)
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+    monkeypatch.setenv("LARK_CLI_BIN", "/opt/lark-cli")
+    service = build_meeting_service()
+    assert service.feishu.name == "lark_cli"
+    assert service.feishu._binary == "/opt/lark-cli"
+
+
+def test_feishu_backend_alias_selects_lark_cli(monkeypatch):
+    monkeypatch.setenv("MOCK_FEISHU", "0")
+    monkeypatch.setenv("FEISHU_BACKEND", "Lark-CLI")
+    monkeypatch.delenv("LARK_CLI_BIN", raising=False)
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+    service = build_meeting_service()
+    assert service.feishu.name == "lark_cli"
+    assert service.feishu._binary == "lark-cli"
+
+
+def test_enterprise_backend_is_explicit_and_needs_app_credentials(monkeypatch):
+    monkeypatch.setenv("MOCK_FEISHU", "0")
+    monkeypatch.setenv("FEISHU_BACKEND", "enterprise")
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+    service = build_meeting_service()
+    assert service.feishu.name == "feishu_enterprise"
+    assert service.feishu.ready() is False
+    assert "FEISHU_APP_ID" in service.feishu.not_ready_message()
+    assert "lark-cli" not in service.feishu.not_ready_message()
+
+
+def test_mock_feishu_ignores_enterprise_backend(monkeypatch):
+    monkeypatch.setenv("MOCK_FEISHU", "1")
+    monkeypatch.setenv("FEISHU_BACKEND", "enterprise")
+    monkeypatch.setenv("FEISHU_APP_ID", "cli_test")
+    monkeypatch.setenv("FEISHU_APP_SECRET", "secret")
+    service = build_meeting_service()
+    assert service.feishu.name == "mock"
+
+
+def test_unknown_feishu_backend_is_not_ready(monkeypatch):
+    monkeypatch.setenv("MOCK_FEISHU", "0")
+    monkeypatch.setenv("FEISHU_BACKEND", "tenant-token")
+    service = build_meeting_service()
+    assert service.feishu.name == "unconfigured"
+    assert service.feishu.ready() is False
+    message = service.feishu.not_ready_message()
+    assert "lark_cli" in message
+    assert "enterprise" in message

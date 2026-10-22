@@ -43,7 +43,10 @@ Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
 `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. `MOCK_ASR=0` calls
 OpenAI Whisper when `OPENAI_API_KEY` is set. `MOCK_LLM=0` calls Volcano Ark
 (`doubao-seed-2-1-turbo-260628`) when `VOLCANO_API_KEY` or `ARK_API_KEY` is set, and fails
-closed when the key is missing. See `app/meeting/README.md`.
+closed when the key is missing. `MOCK_FEISHU=0` creates tasks with `lark-cli`
+(`@larksuite/cli`) as the logged-in user and does not read `FEISHU_APP_ID` or
+`FEISHU_APP_SECRET`. Set `FEISHU_BACKEND=enterprise` only for the custom-app
+fallback. See `app/meeting/README.md`.
 
 ```bash
 export MOCK_ASR=1 MOCK_LLM=1 MOCK_FEISHU=1

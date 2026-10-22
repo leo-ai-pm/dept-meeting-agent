@@ -12,7 +12,13 @@
 # limitations under the License.
 # ========= Copyright 2025-2026 @ Eigent.ai All Rights Reserved. =========
 
-from app.meeting.adapters.feishu import EnterpriseFeishuTaskAdapter
+import json
+import subprocess
+
+from app.meeting.adapters.feishu import (
+    EnterpriseFeishuTaskAdapter,
+    LarkCliFeishuTaskAdapter,
+)
 from tests.app.meeting.conftest import make_client, make_service
 
 
@@ -174,8 +180,116 @@ def test_unconfigured_feishu_does_not_consume_token_or_call_network():
     except Exception as exc:
         raised = exc
     assert getattr(raised, "code", None) == "feishu_not_configured"
+    assert "FEISHU_APP_ID" in str(raised)
+    assert "FEISHU_BACKEND=enterprise" in str(raised)
+    assert "enterprise app credentials" not in str(raised)
     assert adapter.calls == 0
     assert adapter.http_posts == 0
     snapshot = service.get_run(run["id"])
     assert snapshot["status"] == "awaiting_review"
     assert snapshot["approved"] is True
+
+
+def _lark_adapter(runner):
+    return LarkCliFeishuTaskAdapter(
+        runner=runner,
+        which=lambda _name: "/usr/bin/lark-cli",
+    )
+
+
+def test_missing_token_never_spawns_lark_cli():
+    spawned = []
+
+    def runner(args, **kwargs):
+        del kwargs
+        spawned.append(list(args))
+        raise AssertionError("lark-cli must not run without a review token")
+
+    adapter = _lark_adapter(runner)
+    service, feishu = make_service(feishu=adapter)
+    client = make_client(service)
+    run_id = client.post("/meeting/runs").json()["id"]
+    client.post(
+        f"/meeting/runs/{run_id}/import/transcript",
+        json={"text": "会议结论与两条待办。"},
+    )
+    denied = client.post(
+        f"/meeting/runs/{run_id}/write_feishu_tasks",
+        json={},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["reason"] == "missing_token"
+    assert denied.json()["detail"]["feishu_called"] is False
+    assert spawned == []
+    assert feishu.calls == 0
+    assert adapter.calls == 0
+
+
+def test_unready_lark_cli_does_not_consume_token_or_create_tasks():
+    state = {"user_ready": False}
+    creates = []
+
+    def runner(args, **kwargs):
+        del kwargs
+        if list(args)[1:3] == ["auth", "status"]:
+            user = {
+                "status": "ready" if state["user_ready"] else "missing",
+                "available": state["user_ready"],
+            }
+            payload = {
+                "identity": "user" if state["user_ready"] else "bot",
+                "identities": {"user": user},
+            }
+            return subprocess.CompletedProcess(
+                args, 0, stdout=json.dumps(payload), stderr=""
+            )
+        creates.append(list(args))
+        guid = f"guid-{len(creates)}"
+        body = {
+            "ok": True,
+            "identity": "user",
+            "data": {
+                "guid": guid,
+                "url": (
+                    "https://applink.larkoffice.com/client/todo/detail"
+                    f"?guid={guid}"
+                ),
+            },
+        }
+        return subprocess.CompletedProcess(
+            args, 0, stdout=json.dumps(body), stderr=""
+        )
+
+    adapter = _lark_adapter(runner)
+    service, _feishu = make_service(feishu=adapter)
+    run = service.create_run()
+    service.import_transcript(run["id"], "transcript")
+    approved = service.review(run["id"], "approve")
+    token = approved["review_token"]
+    try:
+        service.write_feishu(run["id"], token)
+        raised = False
+    except Exception as exc:
+        raised = exc
+    assert getattr(raised, "code", None) == "feishu_not_configured"
+    message = str(raised)
+    assert "lark-cli" in message
+    assert "auth login" in message
+    assert "FEISHU_APP_ID" not in message
+    assert "enterprise app credentials" not in message
+    assert creates == []
+    assert adapter.calls == 0
+    snapshot = service.get_run(run["id"])
+    assert snapshot["status"] == "awaiting_review"
+    assert snapshot["approved"] is True
+
+    state["user_ready"] = True
+    written = service.write_feishu(run["id"], token)
+    assert written["status"] == "succeeded"
+    assert adapter.calls == 1
+    assert len(creates) == len(written["feishu_receipts"])
+    assert all(item["ok"] for item in written["feishu_receipts"])
+    for command in creates:
+        assert command[1:6] == ["task", "+create", "--json", "--as", "user"]
+        assert "--assignee" not in command
+        assert "FEISHU_APP_SECRET" not in command

@@ -17,7 +17,9 @@
 from app.meeting.adapters.feishu import (
     EnterpriseFeishuTaskAdapter,
     FeishuWriteRequest,
+    LarkCliFeishuTaskAdapter,
     MockFeishuTaskAdapter,
+    UnconfiguredFeishuTaskAdapter,
 )
 from app.meeting.adapters.minutes_llm import (
     MinutesLLM,
@@ -35,8 +37,10 @@ from app.meeting.adapters.transcriber import (
 __all__ = [
     "EnterpriseFeishuTaskAdapter",
     "FeishuWriteRequest",
+    "LarkCliFeishuTaskAdapter",
     "MinutesLLM",
     "MockFeishuTaskAdapter",
+    "UnconfiguredFeishuTaskAdapter",
     "MockMinutesLLM",
     "MockTranscriber",
     "OpenAIWhisperTranscriber",
