@@ -60,8 +60,8 @@
     <header>
       <h1>Meeting run acceptance</h1>
       <p>
-        Create a meeting run, import a transcript, review the draft, then try a
-        Feishu task write with and without a review token.
+        Create a meeting run, record the meeting or import a transcript, review
+        the draft, then try a Feishu task write with and without a review token.
       </p>
     </header>
 
@@ -83,9 +83,10 @@
 张三：我来整理实验数据，下周三前给结论。</textarea>
       <div class="row">
         <button type="button" id="import-transcript">Import transcript</button>
-        <button type="button" id="live-start">Start live</button>
-        <button type="button" id="live-stop">Stop live</button>
+        <button type="button" id="live-start" aria-pressed="false">Start live</button>
+        <button type="button" id="live-stop" disabled>Stop live</button>
       </div>
+      <p id="live-status" aria-live="polite">Not recording.</p>
     </section>
 
     <section aria-labelledby="draft-heading">
@@ -117,13 +118,35 @@
   </main>
   <script>
     const base = window.location.pathname.replace(/\/ui\/?$/, "");
-    const state = { id: null, token: null, draft: null };
+    const state = {
+      id: null,
+      token: null,
+      draft: null,
+      recorder: null,
+      stream: null,
+      chunks: [],
+      mime: "",
+      pendingBlob: null,
+      pendingName: "",
+      busy: false,
+    };
+    const liveMimeCandidates = [
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+      "audio/mp4",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+    ];
 
     const statusEl = document.getElementById("status");
     const runIdEl = document.getElementById("run-id");
     const draftEl = document.getElementById("draft");
     const writeEl = document.getElementById("write-result");
     const replayEl = document.getElementById("replay-log");
+    const liveStatusEl = document.getElementById("live-status");
+    const liveStartEl = document.getElementById("live-start");
+    const liveStopEl = document.getElementById("live-stop");
+    const importTranscriptEl = document.getElementById("import-transcript");
 
     function show(el, value) {
       el.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -151,13 +174,100 @@
       else show(writeEl, result.body);
     }
 
+    function setLiveStatus(text) {
+      liveStatusEl.textContent = text;
+    }
+
+    function syncLiveControls() {
+      const recording = Boolean(state.recorder);
+      const retry = Boolean(state.pendingBlob);
+      liveStartEl.disabled = state.busy || recording || retry;
+      liveStopEl.disabled = state.busy || (!recording && !retry);
+      importTranscriptEl.disabled = recording || retry;
+      liveStartEl.setAttribute("aria-pressed", recording ? "true" : "false");
+    }
+
+    function preferredLiveMime() {
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+      for (const mime of liveMimeCandidates) {
+        if (MediaRecorder.isTypeSupported(mime)) return mime;
+      }
+      return "";
+    }
+
+    function filenameForMime(mime) {
+      const base = String(mime || "").split(";")[0].trim().toLowerCase();
+      if (base === "audio/ogg") return "live-recording.ogg";
+      if (base === "audio/mp4" || base === "audio/m4a" || base === "audio/aac" || base === "audio/x-m4a") {
+        return "live-recording.m4a";
+      }
+      if (base === "audio/wav" || base === "audio/wave" || base === "audio/x-wav") {
+        return "live-recording.wav";
+      }
+      if (base === "audio/mpeg" || base === "audio/mp3") return "live-recording.mp3";
+      if (base === "audio/webm") return "live-recording.webm";
+      return "live-recording.webm";
+    }
+
+    function releaseStream() {
+      const stream = state.stream;
+      state.stream = null;
+      state.recorder = null;
+      state.chunks = [];
+      if (!stream) return;
+      for (const track of stream.getTracks()) track.stop();
+    }
+
+    function discardCapture() {
+      const recorder = state.recorder;
+      state.pendingBlob = null;
+      state.pendingName = "";
+      if (recorder && recorder.state !== "inactive") {
+        try { recorder.stop(); } catch (err) { /* already stopped */ }
+      }
+      releaseStream();
+      syncLiveControls();
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || "");
+          const comma = dataUrl.indexOf(",");
+          resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+        };
+        reader.onerror = () => reject(reader.error || new Error("Could not read audio"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function waitForRecorderStop(recorder) {
+      if (!recorder || recorder.state === "inactive") return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Recording did not stop")), 10000);
+        recorder.addEventListener("stop", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+        try {
+          recorder.stop();
+        } catch (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+    }
+
     document.getElementById("create").addEventListener("click", async () => {
       const result = await api("/runs", { method: "POST", body: JSON.stringify({ title: "Acceptance run" }) });
       if (!result.ok) return show(writeEl, result.body);
+      discardCapture();
       state.token = null;
       state.draft = null;
       paintRun(result.body);
       show(draftEl, "No draft yet.");
+      setLiveStatus("Not recording.");
     });
 
     document.getElementById("refresh").addEventListener("click", refresh);
@@ -174,23 +284,110 @@
       await loadDraft();
     });
 
-    document.getElementById("live-start").addEventListener("click", async () => {
-      if (!state.id) return;
-      const result = await api("/runs/" + state.id + "/live/start", { method: "POST" });
-      if (!result.ok) return show(writeEl, result.body);
-      paintRun(result.body);
+    liveStartEl.addEventListener("click", async () => {
+      if (!state.id) {
+        setLiveStatus("Create a run first.");
+        return;
+      }
+      if (state.busy || state.recorder || state.pendingBlob) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setLiveStatus("This browser cannot capture the microphone.");
+        return;
+      }
+      state.busy = true;
+      syncLiveControls();
+      setLiveStatus("Requesting microphone permission.");
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = preferredLiveMime();
+        const recorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime })
+          : new MediaRecorder(stream);
+        const chunks = [];
+        recorder.addEventListener("dataavailable", (event) => {
+          if (event.data && event.data.size > 0) chunks.push(event.data);
+        });
+        recorder.start(1000);
+        state.stream = stream;
+        state.recorder = recorder;
+        state.chunks = chunks;
+        state.mime = recorder.mimeType || mime;
+        stream = null;
+        const result = await api("/runs/" + state.id + "/live/start", { method: "POST" });
+        if (!result.ok) {
+          discardCapture();
+          setLiveStatus("Live start failed.");
+          show(writeEl, result.body);
+          return;
+        }
+        paintRun(result.body);
+        setLiveStatus("Recording. Stop live when the meeting ends.");
+      } catch (err) {
+        if (stream) {
+          for (const track of stream.getTracks()) track.stop();
+        }
+        discardCapture();
+        const message = err && err.message ? err.message : "Microphone permission failed";
+        setLiveStatus(message);
+        show(writeEl, message);
+      } finally {
+        state.busy = false;
+        syncLiveControls();
+      }
     });
 
-    document.getElementById("live-stop").addEventListener("click", async () => {
-      if (!state.id) return;
-      const result = await api("/runs/" + state.id + "/live/stop", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      if (!result.ok) return show(writeEl, result.body);
-      paintRun(result.body);
-      await loadDraft();
+    liveStopEl.addEventListener("click", async () => {
+      if (!state.id || state.busy) return;
+      state.busy = true;
+      syncLiveControls();
+      try {
+        if (state.recorder) {
+          const recorder = state.recorder;
+          const chunks = state.chunks;
+          const mime = state.mime || recorder.mimeType || "audio/webm";
+          await waitForRecorderStop(recorder);
+          state.pendingBlob = new Blob(chunks, { type: mime });
+          state.pendingName = filenameForMime(mime);
+          releaseStream();
+        }
+        if (!state.pendingBlob || state.pendingBlob.size === 0) {
+          state.pendingBlob = null;
+          state.pendingName = "";
+          setLiveStatus("No audio captured. Create a new run and allow the microphone.");
+          return;
+        }
+        setLiveStatus("Uploading recording.");
+        const contentBase64 = await blobToBase64(state.pendingBlob);
+        const result = await api("/runs/" + state.id + "/live/stop", {
+          method: "POST",
+          body: JSON.stringify({
+            filename: state.pendingName,
+            content_base64: contentBase64,
+          }),
+        });
+        if (!result.ok) {
+          setLiveStatus("Stop failed. Stop live will send the same recording again.");
+          show(writeEl, result.body);
+          return;
+        }
+        state.pendingBlob = null;
+        state.pendingName = "";
+        paintRun(result.body);
+        setLiveStatus("Recording stopped. Draft is ready for review.");
+        await loadDraft();
+      } catch (err) {
+        releaseStream();
+        const message = err && err.message ? err.message : "Could not stop recording";
+        setLiveStatus(message);
+        show(writeEl, message);
+      } finally {
+        state.busy = false;
+        syncLiveControls();
+      }
     });
+
+    syncLiveControls();
 
     async function loadDraft() {
       const result = await api("/runs/" + state.id + "/draft");

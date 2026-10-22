@@ -185,13 +185,26 @@ does not consume the review token.
 | POST | `/meeting/runs/{id}/import/audio` | ingest, then automatic pipeline |
 | POST | `/meeting/runs/{id}/import/transcript` | skip ASR, then drafting |
 | POST | `/meeting/runs/{id}/live/start` | capture marker; status stays `created` |
-| POST | `/meeting/runs/{id}/live/stop` | automatic pipeline |
+| POST | `/meeting/runs/{id}/live/stop` | recorded audio, then the same pipeline as import/audio |
 | GET | `/meeting/runs/{id}` | snapshot |
 | GET | `/meeting/runs/{id}/replay` | event log |
 | GET | `/meeting/runs/{id}/draft` | minutes and todos |
 | POST | `/meeting/runs/{id}/review` | `approve`, `reject`, or `edit_approve` |
 | POST | `/meeting/runs/{id}/write_feishu_tasks` | requires `review_token` |
 | POST | `/meeting/runs/{id}/export_feishu` | same gate, alias |
+
+`/meeting/ui` records in the browser. Start live calls `getUserMedia` and
+`MediaRecorder`. Stop live posts JSON `filename` and `content_base64`, the
+same shape as audio import. The page prefers `audio/ogg;codecs=opus`
+(`.ogg`) or `audio/mp4` (`.m4a`), which standard Volcano ASR accepts, and
+otherwise `audio/webm`. Those bytes follow the import/audio ASR path
+(`MOCK_ASR`, `ASR_BACKEND`, Volcano standard submit/query, or Whisper) and
+stop at `awaiting_review`. Feishu writes still require human review.
+
+`MOCK_ASR=1` may call live stop with an empty body. The service then uses
+`mock-live:{id}` so CI can run without a microphone. `MOCK_ASR=0` rejects
+empty or missing audio with HTTP 422 `empty_audio` and does not invent a
+transcript.
 
 States: `created` → `ingesting` → `transcribing` → `drafting` →
 `awaiting_review` → `writing_feishu` → `succeeded`, plus `failed` and

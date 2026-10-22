@@ -41,6 +41,11 @@ def test_meeting_routes_mount_beside_kernel_runs():
     page = client.get("/meeting/ui")
     assert page.status_code == 200
     assert "Meeting run acceptance" in page.text
+    assert "getUserMedia" in page.text
+    assert "MediaRecorder" in page.text
+    assert "content_base64" in page.text
+    assert "audio/ogg;codecs=opus" in page.text
+    assert "live-recording.ogg" in page.text
     denied = client.post(
         f"/meeting/runs/{run_id}/export_feishu",
         json={},
