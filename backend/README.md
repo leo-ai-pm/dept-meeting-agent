@@ -42,7 +42,7 @@ export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
 `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. `MOCK_ASR=0` calls
 OpenAI Whisper when `OPENAI_API_KEY` is set. `MOCK_LLM=0` calls Volcano Ark
-(`doubao-pro-32k`) when `VOLCANO_API_KEY` or `ARK_API_KEY` is set, and fails
+(`doubao-seed-2-1-turbo-260628`) when `VOLCANO_API_KEY` or `ARK_API_KEY` is set, and fails
 closed when the key is missing. See `app/meeting/README.md`.
 
 ```bash

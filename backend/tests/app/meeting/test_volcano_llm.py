@@ -87,14 +87,14 @@ def test_documented_ark_chat_endpoint():
     assert VOLCANO_DEFAULT_BASE_URL == (
         "https://ark.cn-beijing.volces.com/api/v3"
     )
-    assert VOLCANO_DEFAULT_MODEL == "doubao-pro-32k"
+    assert VOLCANO_DEFAULT_MODEL == "doubao-seed-2-1-turbo-260628"
 
 
 def test_mock_llm_ignores_key_and_returns_fixtures(monkeypatch):
     monkeypatch.delenv("MOCK_LLM", raising=False)
     monkeypatch.setenv("VOLCANO_API_KEY", _KEY)
     monkeypatch.setenv("ARK_API_KEY", "ark-other-secret")
-    monkeypatch.setenv("MEETING_LLM_MODEL", "doubao-pro-32k")
+    monkeypatch.setenv("MEETING_LLM_MODEL", "doubao-seed-2-1-turbo-260628")
     service = build_meeting_service()
     assert service.minutes_llm.name == "mock"
     minutes = service.minutes_llm.draft_minutes(_TRANSCRIPT)
@@ -165,7 +165,7 @@ def test_ark_aliases_used_when_volcano_names_are_blank(monkeypatch):
     assert service.minutes_llm._url == (
         "https://alias.example/api/v3/chat/completions"
     )
-    assert service.minutes_llm._model == "doubao-pro-32k"
+    assert service.minutes_llm._model == "doubao-seed-2-1-turbo-260628"
 
 
 def test_default_ark_target_when_optional_env_is_blank(monkeypatch):
@@ -179,7 +179,8 @@ def test_default_ark_target_when_optional_env_is_blank(monkeypatch):
     assert service.minutes_llm._url == (
         "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
     )
-    assert service.minutes_llm._model == "doubao-pro-32k"
+    assert service.minutes_llm._model == "doubao-seed-2-1-turbo-260628"
+    assert service.minutes_llm._client.timeout == httpx.Timeout(180.0)
 
 
 def test_chat_completions_maps_vendor_json_and_skips_fixtures():
@@ -198,7 +199,7 @@ def test_chat_completions_maps_vendor_json_and_skips_fixtures():
     llm = VolcanoMinutesLLM(
         api_key=_KEY,
         base_url="https://ark.cn-beijing.volces.com/api/v3/",
-        model="doubao-pro-32k",
+        model="doubao-seed-2-1-turbo-260628",
         client=_client(handler),
     )
     service, feishu = make_service(minutes_llm=llm)
@@ -221,7 +222,7 @@ def test_chat_completions_maps_vendor_json_and_skips_fixtures():
         )
         assert request.headers["authorization"] == f"Bearer {_KEY}"
         body = json.loads(request.content)
-        assert body["model"] == "doubao-pro-32k"
+        assert body["model"] == "doubao-seed-2-1-turbo-260628"
         assert body["temperature"] == 0.2
         assert body["response_format"] == {"type": "json_object"}
         assert [item["role"] for item in body["messages"]] == [
