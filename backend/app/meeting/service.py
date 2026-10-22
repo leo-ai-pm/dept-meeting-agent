@@ -29,7 +29,9 @@ from app.meeting.adapters.feishu import (
     EnterpriseFeishuTaskAdapter,
     FeishuTaskAdapter,
     FeishuWriteRequest,
+    LarkCliFeishuTaskAdapter,
     MockFeishuTaskAdapter,
+    UnconfiguredFeishuTaskAdapter,
 )
 from app.meeting.adapters.minutes_llm import (
     VOLCANO_DEFAULT_BASE_URL,
@@ -339,7 +341,7 @@ class MeetingService:
             if not self.feishu.ready():
                 raise MeetingServiceError(
                     "feishu_not_configured",
-                    "Feishu enterprise app credentials are not configured",
+                    _feishu_not_ready_message(self.feishu),
                     status_code=503,
                 )
             self._transition(run, WRITING_FEISHU)
@@ -683,19 +685,9 @@ def _build_minutes_llm() -> MinutesLLM:
 
 
 def build_meeting_service() -> MeetingService:
-    feishu: FeishuTaskAdapter
     transcriber = _build_transcriber()
     minutes_llm = _build_minutes_llm()
-    if env_flag("MOCK_FEISHU", "1"):
-        feishu = MockFeishuTaskAdapter()
-    else:
-        feishu = EnterpriseFeishuTaskAdapter(
-            app_id=os.environ.get("FEISHU_APP_ID", ""),
-            app_secret=os.environ.get("FEISHU_APP_SECRET", ""),
-            base_url=os.environ.get(
-                "FEISHU_API_BASE", "https://open.feishu.cn"
-            ),
-        )
+    feishu = _build_feishu()
     ttl_raw = os.environ.get("MEETING_REVIEW_TOKEN_TTL_SECONDS", "3600")
     try:
         ttl = int(ttl_raw)
@@ -708,6 +700,47 @@ def build_meeting_service() -> MeetingService:
         feishu=feishu,
         tokens=tokens,
     )
+
+
+def _build_feishu() -> FeishuTaskAdapter:
+    """Select the task backend.
+
+    `MOCK_FEISHU=1` (the default) stays in-process. `MOCK_FEISHU=0` uses
+    lark-cli and does not read `FEISHU_APP_ID` or `FEISHU_APP_SECRET`.
+    `FEISHU_BACKEND=enterprise` opts into the custom-app tenant token.
+    """
+
+    if env_flag("MOCK_FEISHU", "1"):
+        return MockFeishuTaskAdapter()
+    backend = os.environ.get("FEISHU_BACKEND", "lark_cli").strip().lower()
+    backend = backend or "lark_cli"
+    if backend in {"enterprise", "feishu_enterprise"}:
+        return EnterpriseFeishuTaskAdapter(
+            app_id=os.environ.get("FEISHU_APP_ID", ""),
+            app_secret=os.environ.get("FEISHU_APP_SECRET", ""),
+            base_url=os.environ.get(
+                "FEISHU_API_BASE", "https://open.feishu.cn"
+            ),
+        )
+    if backend in {"lark_cli", "lark-cli", "cli"}:
+        binary = os.environ.get("LARK_CLI_BIN", "").strip() or "lark-cli"
+        return LarkCliFeishuTaskAdapter(binary=binary)
+    shown = backend[:80]
+    return UnconfiguredFeishuTaskAdapter(
+        "FEISHU_BACKEND must be lark_cli (default) or enterprise. "
+        f"Got {shown!r}."
+    )
+
+
+def _feishu_not_ready_message(feishu: FeishuTaskAdapter) -> str:
+    fallback = "Feishu task backend is not configured"
+    reporter = getattr(feishu, "not_ready_message", None)
+    if not callable(reporter):
+        return fallback
+    reported = reporter()
+    if isinstance(reported, str) and reported.strip():
+        return reported.strip()
+    return fallback
 
 
 def _now() -> str:

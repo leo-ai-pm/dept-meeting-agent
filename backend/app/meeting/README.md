@@ -25,7 +25,7 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 | --- | --- | --- |
 | `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls OpenAI Whisper when `OPENAI_API_KEY` is set |
 | `MOCK_LLM` | `1` | `1` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` calls Volcano Ark when a key is set |
-| `MOCK_FEISHU` | `1` | Task adapter returns in-process receipts and does not call Feishu |
+| `MOCK_FEISHU` | `1` | `1` returns in-process receipts. `0` writes one Feishu task per todo through `lark-cli` |
 | `OPENAI_API_KEY` | unset | Required for real ASR when `MOCK_ASR=0`. Never commit a real key |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API root, including `/v1`. Used only when `MOCK_ASR=0` |
 | `MEETING_ASR_MODEL` | `whisper-1` | `audio/transcriptions` model. Used only when `MOCK_ASR=0` |
@@ -36,8 +36,10 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 | `MEETING_LLM_MODEL` | `doubao-seed-2-1-turbo-260628` | Ark `model` field: a Model ID or an inference endpoint ID (`ep-...`). Empty uses this default |
 | `MEETING_REVIEW_TOKEN_TTL_SECONDS` | `3600` | Review token lifetime |
 | `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it |
-| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` |
-| `FEISHU_API_BASE` | `https://open.feishu.cn` | Feishu Open API origin |
+| `FEISHU_BACKEND` | `lark_cli` | Live backend when `MOCK_FEISHU=0`. `lark_cli` (also `lark-cli` or `cli`) runs `lark-cli`. `enterprise` selects the custom-app fallback |
+| `LARK_CLI_BIN` | `lark-cli` | Binary name or absolute path for the lark-cli adapter. Ignored when `MOCK_FEISHU=1` |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` and `FEISHU_BACKEND=enterprise`. Not read by the lark-cli path |
+| `FEISHU_API_BASE` | `https://open.feishu.cn` | Feishu Open API origin. Enterprise backend only |
 
 Set `MOCK_ASR=0` to call OpenAI `POST /audio/transcriptions`. The request
 sends the audio file and `MEETING_ASR_MODEL` with `Authorization: Bearer`.
@@ -66,8 +68,34 @@ endpoint ID (`ep-...`) to override it. A rejected model fails the run.
 Deep-thinking replies can run past two minutes, so the minutes client
 waits 180 seconds. Whisper ASR and Feishu keep their own timeouts.
 
-A Feishu write with `MOCK_FEISHU=0` and missing credentials is refused before
-any HTTP call and does not consume the review token.
+Set `MOCK_FEISHU=0` to create one Feishu task per approved todo with the
+official Lark/Feishu CLI (`lark-cli`, npm package `@larksuite/cli`). Install
+the CLI, run `lark-cli config init` when the app is not configured yet, then
+`lark-cli auth login` so a user identity with the task and contact domains is
+ready. The adapter prefers `--as user` so writes follow that login instead of
+an enterprise app secret.
+
+Readiness is local. `lark-cli` must be on `PATH` (or `LARK_CLI_BIN`), and
+`lark-cli auth status --json` must show `identities.user.status` of `ready`
+or `needs_refresh` (`needs_refresh` still has a usable token; the CLI
+refreshes it on the next user call). The adapter does not pass `--verify`,
+because that flag calls the Feishu API. A missing binary or a user identity
+that is not ready raises a not-configured error before any task create and
+does not consume the review token.
+
+Each todo becomes `lark-cli task +create --json --as user` with `--summary`,
+`--description`, `--idempotency-key` (the todo idempotency key), `--due` when
+the todo has an ISO date, and `--assignee` only when the assignee is already
+an `ou_…` open_id. Display names are not resolved to open_ids. The command
+stdout is the CLI envelope `{ok, data:{guid, url, ...}}`. Receipts use
+`feishu_task_id` for `data.guid` and include `url` when it is present.
+
+`FEISHU_APP_ID` and `FEISHU_APP_SECRET` are not required on this path, and the
+CLI child process does not receive them. Set `FEISHU_BACKEND=enterprise` to
+use `EnterpriseFeishuTaskAdapter` instead. That fallback still needs the
+enterprise custom app credentials and does not call `lark-cli`. A write on
+that backend with missing credentials is refused before any HTTP call and
+does not consume the review token.
 
 ## Paths
 
