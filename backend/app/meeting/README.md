@@ -3,6 +3,10 @@
 Thin FastAPI slice for PRD v0.1. It does not modify the CAMEL / Eigent kernel.
 Kernel run routes stay on `/runs`. These routes are under `/meeting`.
 
+Product story (before / after, harness, metrics, dual entry, non-goals):
+[docs/meeting-efficiency-harness.md](../../../docs/meeting-efficiency-harness.md).
+This file remains the operator reference for flags and vendor behavior.
+
 ## Run locally
 
 From `backend/`, with the project virtualenv:
