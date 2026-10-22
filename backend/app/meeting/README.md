@@ -20,8 +20,24 @@ uv run uvicorn main:api --port 5001
 
 Acceptance page: <http://127.0.0.1:5001/meeting/ui>
 
+The page copy is Simplified Chinese first. Buttons keep the English names
+Create run, Import transcript, Start live, Stop live, Approve, Reject,
+Write with token, Write without token, and Replay.
+
 `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to on when unset. CI and the
 acceptance page use the fixtures in `fixtures/`. No API keys are required.
+
+Mock demo from the repository root. The script forces those three mock
+flags on, imports `fixtures/transcript.txt`, prints the draft title, todo
+count, and replay event types, and exits non-zero on failure. It does not
+leave a server running:
+
+```bash
+scripts/meeting-mock-demo.sh
+```
+
+How that script behaves is also in
+[docs/meeting-efficiency-harness.md](../../../docs/meeting-efficiency-harness.md).
 
 ## Flags
 

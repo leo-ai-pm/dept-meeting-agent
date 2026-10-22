@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Meeting run acceptance</title>
+  <title>会议运行验收 · Meeting run acceptance</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -14,6 +14,8 @@
       font: 13px/20px system-ui, sans-serif;
     }
     h1 { font-size: 28px; line-height: 36px; font-weight: 600; margin: 0 0 8px; }
+    header { display: grid; gap: 8px; }
+    header h1 { margin: 0; }
     h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 8px; }
     p { margin: 0; }
     main { display: grid; gap: 24px; }
@@ -58,7 +60,12 @@
 <body>
   <main>
     <header>
-      <h1>Meeting run acceptance</h1>
+      <h1>会议运行验收</h1>
+      <p>Meeting run acceptance</p>
+      <p>
+        创建一次会议运行，录音或导入文字稿，审阅草稿，再用带 review token
+        和不带 token 的请求各试一次飞书任务写入。
+      </p>
       <p>
         Create a meeting run, record the meeting or import a transcript, review
         the draft, then try a Feishu task write with and without a review token.
@@ -66,54 +73,54 @@
     </header>
 
     <section aria-labelledby="run-heading">
-      <h2 id="run-heading">Run</h2>
+      <h2 id="run-heading">运行 Run</h2>
       <div class="row">
-        <button type="button" id="create">Create run</button>
-        <button type="button" id="refresh">Refresh</button>
-        <p>Status: <span class="status" id="status">none</span></p>
+        <button type="button" id="create">创建运行 Create run</button>
+        <button type="button" id="refresh">刷新 Refresh</button>
+        <p>状态 Status: <span class="status" id="status">none</span></p>
       </div>
       <p id="run-id"></p>
     </section>
 
     <section aria-labelledby="import-heading">
-      <h2 id="import-heading">Import transcript</h2>
-      <label for="transcript">Transcript</label>
+      <h2 id="import-heading">导入文字稿 Import transcript</h2>
+      <label for="transcript">文字稿 Transcript</label>
       <textarea id="transcript">会议：增长组周会
 李敏：落地页转化实验在周五前复盘。新客优惠只对首单生效。
 张三：我来整理实验数据，下周三前给结论。</textarea>
       <div class="row">
-        <button type="button" id="import-transcript">Import transcript</button>
-        <button type="button" id="live-start" aria-pressed="false">Start live</button>
-        <button type="button" id="live-stop" disabled>Stop live</button>
+        <button type="button" id="import-transcript">导入文字稿 Import transcript</button>
+        <button type="button" id="live-start" aria-pressed="false">开始录音 Start live</button>
+        <button type="button" id="live-stop" disabled>停止录音 Stop live</button>
       </div>
-      <p id="live-status" aria-live="polite">Not recording.</p>
+      <p id="live-status" aria-live="polite">未在录音。 Not recording.</p>
     </section>
 
     <section aria-labelledby="draft-heading">
-      <h2 id="draft-heading">Draft</h2>
-      <pre id="draft">No draft yet.</pre>
+      <h2 id="draft-heading">草稿 Draft</h2>
+      <pre id="draft">还没有草稿。 No draft yet.</pre>
       <div class="row">
-        <button type="button" id="approve">Approve</button>
-        <button type="button" id="reject">Reject</button>
-        <label for="todo-title">First Feishu task title</label>
+        <button type="button" id="approve">批准 Approve</button>
+        <button type="button" id="reject">拒绝 Reject</button>
+        <label for="todo-title">第一条飞书任务标题 First Feishu task title</label>
         <input id="todo-title" type="text" value="" />
-        <button type="button" id="edit-approve">Edit and approve</button>
+        <button type="button" id="edit-approve">修改并批准 Edit and approve</button>
       </div>
     </section>
 
     <section aria-labelledby="write-heading">
-      <h2 id="write-heading">Feishu task write</h2>
+      <h2 id="write-heading">飞书任务写入 Feishu task write</h2>
       <div class="row">
-        <button type="button" id="write-with">Write with token</button>
-        <button type="button" id="write-without">Write without token</button>
+        <button type="button" id="write-with">带 token 写入 Write with token</button>
+        <button type="button" id="write-without">不带 token 写入 Write without token</button>
       </div>
-      <pre id="write-result">No write attempted.</pre>
+      <pre id="write-result">还没有尝试写入。 No write attempted.</pre>
     </section>
 
     <section aria-labelledby="replay-heading">
-      <h2 id="replay-heading">Replay</h2>
-      <button type="button" id="replay">Load event log</button>
-      <pre id="replay-log">No events loaded.</pre>
+      <h2 id="replay-heading">回放 Replay</h2>
+      <button type="button" id="replay">回放 Replay</button>
+      <pre id="replay-log">还没有加载事件。 No events loaded.</pre>
     </section>
   </main>
   <script>
@@ -164,7 +171,7 @@
     function paintRun(run) {
       state.id = run.id;
       statusEl.textContent = run.status;
-      runIdEl.textContent = "Run " + run.id;
+      runIdEl.textContent = "运行 Run " + run.id;
     }
 
     async function refresh() {
@@ -237,7 +244,7 @@
           const comma = dataUrl.indexOf(",");
           resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
         };
-        reader.onerror = () => reject(reader.error || new Error("Could not read audio"));
+        reader.onerror = () => reject(reader.error || new Error("无法读取音频。 Could not read audio"));
         reader.readAsDataURL(blob);
       });
     }
@@ -245,7 +252,7 @@
     function waitForRecorderStop(recorder) {
       if (!recorder || recorder.state === "inactive") return Promise.resolve();
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Recording did not stop")), 10000);
+        const timer = setTimeout(() => reject(new Error("录音没有停止。 Recording did not stop")), 10000);
         recorder.addEventListener("stop", () => {
           clearTimeout(timer);
           resolve();
@@ -266,8 +273,8 @@
       state.token = null;
       state.draft = null;
       paintRun(result.body);
-      show(draftEl, "No draft yet.");
-      setLiveStatus("Not recording.");
+      show(draftEl, "还没有草稿。 No draft yet.");
+      setLiveStatus("未在录音。 Not recording.");
     });
 
     document.getElementById("refresh").addEventListener("click", refresh);
@@ -286,17 +293,17 @@
 
     liveStartEl.addEventListener("click", async () => {
       if (!state.id) {
-        setLiveStatus("Create a run first.");
+        setLiveStatus("请先创建运行。 Create a run first.");
         return;
       }
       if (state.busy || state.recorder || state.pendingBlob) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setLiveStatus("This browser cannot capture the microphone.");
+        setLiveStatus("此浏览器无法采集麦克风。 This browser cannot capture the microphone.");
         return;
       }
       state.busy = true;
       syncLiveControls();
-      setLiveStatus("Requesting microphone permission.");
+      setLiveStatus("正在请求麦克风权限。 Requesting microphone permission.");
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -317,18 +324,18 @@
         const result = await api("/runs/" + state.id + "/live/start", { method: "POST" });
         if (!result.ok) {
           discardCapture();
-          setLiveStatus("Live start failed.");
+          setLiveStatus("开始录音失败。 Live start failed.");
           show(writeEl, result.body);
           return;
         }
         paintRun(result.body);
-        setLiveStatus("Recording. Stop live when the meeting ends.");
+        setLiveStatus("正在录音。会议结束请点停止录音。 Recording. Stop live when the meeting ends.");
       } catch (err) {
         if (stream) {
           for (const track of stream.getTracks()) track.stop();
         }
         discardCapture();
-        const message = err && err.message ? err.message : "Microphone permission failed";
+        const message = err && err.message ? err.message : "麦克风权限失败。 Microphone permission failed";
         setLiveStatus(message);
         show(writeEl, message);
       } finally {
@@ -354,10 +361,10 @@
         if (!state.pendingBlob || state.pendingBlob.size === 0) {
           state.pendingBlob = null;
           state.pendingName = "";
-          setLiveStatus("No audio captured. Create a new run and allow the microphone.");
+          setLiveStatus("没有采集到音频。请新建运行并允许麦克风。 No audio captured. Create a new run and allow the microphone.");
           return;
         }
-        setLiveStatus("Uploading recording.");
+        setLiveStatus("正在上传录音。 Uploading recording.");
         const contentBase64 = await blobToBase64(state.pendingBlob);
         const result = await api("/runs/" + state.id + "/live/stop", {
           method: "POST",
@@ -367,18 +374,18 @@
           }),
         });
         if (!result.ok) {
-          setLiveStatus("Stop failed. Stop live will send the same recording again.");
+          setLiveStatus("停止失败。再次停止录音会重发同一段录音。 Stop failed. Stop live will send the same recording again.");
           show(writeEl, result.body);
           return;
         }
         state.pendingBlob = null;
         state.pendingName = "";
         paintRun(result.body);
-        setLiveStatus("Recording stopped. Draft is ready for review.");
+        setLiveStatus("录音已停止。草稿可以审阅。 Recording stopped. Draft is ready for review.");
         await loadDraft();
       } catch (err) {
         releaseStream();
-        const message = err && err.message ? err.message : "Could not stop recording";
+        const message = err && err.message ? err.message : "无法停止录音。 Could not stop recording";
         setLiveStatus(message);
         show(writeEl, message);
       } finally {

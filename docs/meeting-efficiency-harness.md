@@ -39,9 +39,12 @@ then stops at `awaiting_review`. A person approves before a one-time
 carries that token. Reject issues no token and writes nothing.
 
 Acceptance UI: [http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui)
-when the API is served from `backend/` on port 5001. `MOCK_ASR`,
-`MOCK_LLM`, and `MOCK_FEISHU` default to on, so that page and CI need no
-API keys. There is no separate generate action.
+when the API is served from `backend/` on port 5001. The page is
+Simplified Chinese first. The controls still read Create run, Import
+transcript, Start live, Stop live, Approve, Reject, Write with token,
+Write without token, and Replay. `MOCK_ASR`, `MOCK_LLM`, and
+`MOCK_FEISHU` default to on, so that page and CI need no API keys. There
+is no separate generate action.
 
 ## Harness 五要素 / Five parts
 
@@ -116,6 +119,13 @@ These are the v1 bars. No millisecond SLO is hard-coded.
 | Mock CI green | `cd backend && uv run pytest tests/app/meeting -q` with the default mocks. | Includes `test_router_mount.py` (meeting routes exist, `/runs/{id}/import/transcript` does not) and `test_state_machine.py`. |
 | Live smoke | Manual checklist below. Not a CI job. | Vendor calls happen only when the matching `MOCK_*=0` and that provider is configured. Missing keys fail the run and do not substitute fixtures. |
 
+作品集目标 / Portfolio targets, for an interview only. They are not CI
+gates, and this page does not record a measured baseline. 短会议在停止后到可用草稿
+≤10 分钟；批准前待办的手工修改率 ≤10%；负责人已经是 `ou_…`，或不用改名就填对，
+≥70%。 Time-to-usable draft after stop on a short meeting ≤10 min; manual
+edit rate on todos before approve ≤10%; assignee already `ou_…` or
+correctly filled without a rename ≥70%.
+
 Live time-to-draft is dominated by standard ASR polling. The default poll
 budget is `VOLCANO_ASR_POLL_TIMEOUT` (1800 seconds). Each Ark call uses a
 180 second client timeout, and the minutes path makes two calls. v1 does
@@ -135,7 +145,7 @@ Mock (default, no keys):
    HTTP 403.
 4. New run, import again, Approve, then “Write without token” (403,
    still `awaiting_review`) and “Write with token” (mock receipts,
-   `succeeded`). Load the event log.
+   `succeeded`). Replay.
 
 Microphone on the mock page: Start live / Stop live uses `getUserMedia`
 and `MediaRecorder`, then posts `filename` and `content_base64` to
@@ -155,6 +165,35 @@ Live vendors (only when you mean to leave the fixtures):
 4. Stop with real audio reaches `awaiting_review` or `failed`.
    `MOCK_ASR=0` plus an empty live stop is HTTP 422 `empty_audio`.
 5. Feishu still waits for Approve and a `review_token`.
+
+## 模拟演示 / Mock demo
+
+`scripts/meeting-mock-demo.sh` sets `MOCK_ASR`, `MOCK_LLM`, and
+`MOCK_FEISHU` to `1`. It creates a run, imports
+`backend/app/meeting/fixtures/transcript.txt`, and exits non-zero unless
+the status is `awaiting_review`. On success it prints the draft title,
+the todo count, and the replay event types. The script starts a
+short-lived meeting server for those curl calls and stops it on exit. It
+does not leave uvicorn running.
+
+From the repository root:
+
+```bash
+scripts/meeting-mock-demo.sh
+```
+
+To click through `/meeting/ui`, start the API yourself and leave it up:
+
+```bash
+cd backend && uv run uvicorn main:api --port 5001
+```
+
+Open [http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui).
+Unset mock flags stay on.
+`MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`
+sends the same curl calls to that server instead of starting one. That
+server must already be on the default mocks; the script cannot change
+its flags.
 
 ## 双入口 / Dual entry
 
