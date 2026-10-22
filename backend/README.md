@@ -41,8 +41,10 @@ export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 
 Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
 `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. `MOCK_ASR=0` calls
-豆包语音 flash ASR when `VOLCANO_ASR_API_KEY` is set (`ASR_BACKEND=volcano`,
-the default). That speech key is not the Ark minutes key `VOLCANO_API_KEY`.
+豆包录音文件识别标准版 (submit, then query, resource `volc.seedasr.auc`)
+when `VOLCANO_ASR_API_KEY` is set (`ASR_BACKEND=volcano`, the default).
+Flash resource `volc.bigasr.auc_turbo` is not called. That speech key is
+not the Ark minutes key `VOLCANO_API_KEY`.
 `ASR_BACKEND=openai` (or `whisper`) keeps OpenAI Whisper when `OPENAI_API_KEY`
 is set. `MOCK_LLM=0` calls Volcano Ark
 (`doubao-seed-2-1-turbo-260628`) when `VOLCANO_API_KEY` or `ARK_API_KEY` is set, and fails

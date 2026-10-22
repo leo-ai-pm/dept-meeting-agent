@@ -24,14 +24,17 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `MOCK_ASR` | `1` | `1` returns `fixtures/transcript.txt`. `0` calls the live ASR backend |
-| `ASR_BACKEND` | `volcano` | Live backend when `MOCK_ASR=0`. `volcano` calls 豆包语音 flash ASR. `openai` or `whisper` calls OpenAI Whisper |
+| `ASR_BACKEND` | `volcano` | Live backend when `MOCK_ASR=0`. `volcano` calls 豆包录音文件识别标准版 (submit, then query). `openai` or `whisper` calls OpenAI Whisper |
 | `VOLCANO_ASR_API_KEY` | unset | Preferred 豆包语音控制台 API Key (`X-Api-Key`). Not the Ark minutes key. Never commit a real key |
 | `VOLCANO_OPENSPEECH_API_KEY` | unset | Alias of `VOLCANO_ASR_API_KEY` when that variable is unset or blank |
 | `VOLCANO_ASR_APP_KEY` | unset | Older-console APP ID (`X-Api-App-Key`). Used only when the speech API Key is unset. `VOLCANO_ASR_APP_ID` is an alias |
 | `VOLCANO_ASR_ACCESS_KEY` | unset | Older-console Access Token (`X-Api-Access-Key`). Must be set with the APP ID. `VOLCANO_ASR_ACCESS_TOKEN` is an alias |
-| `VOLCANO_ASR_RESOURCE_ID` | `volc.bigasr.auc_turbo` | Flash resource ID. The speech account must have this resource enabled |
+| `VOLCANO_ASR_RESOURCE_ID` | `volc.seedasr.auc` | 录音文件识别模型 2.0 standard. `volc.bigasr.auc` is model 1.0. Flash `volc.bigasr.auc_turbo` is not called |
 | `VOLCANO_ASR_UID` | `dept-meeting-agent` | `user.uid` sent with the request. Not a secret |
-| `VOLCANO_ASR_TIMEOUT` | `180` | HTTP timeout in seconds for the synchronous flash call |
+| `VOLCANO_ASR_HTTP_TIMEOUT` | `60` | Seconds for each submit or query HTTP call |
+| `VOLCANO_ASR_POLL_INTERVAL` | `2` | First delay after a pending query. Each later delay doubles |
+| `VOLCANO_ASR_POLL_MAX_INTERVAL` | `15` | Cap on that delay. Values below the initial interval are raised to it |
+| `VOLCANO_ASR_POLL_TIMEOUT` | `1800` | Overall seconds of query polling after a successful submit |
 | `MOCK_LLM` | `1` | `1` returns `fixtures/minutes.json` and `fixtures/todos.json`. `0` calls Volcano Ark when a key is set |
 | `MOCK_FEISHU` | `1` | `1` returns in-process receipts. `0` writes one Feishu task per todo through `lark-cli` |
 | `OPENAI_API_KEY` | unset | Required only when `MOCK_ASR=0` and `ASR_BACKEND` is `openai` or `whisper`. Never commit a real key |
@@ -51,20 +54,40 @@ acceptance page use the fixtures in `fixtures/`. No API keys are required.
 
 Set `MOCK_ASR=0` to call a live ASR backend. The default is Volcano Doubao
 speech recognition (豆包语音), not OpenAI Whisper. `ASR_BACKEND=volcano`
-posts in-process audio to the flash one-shot endpoint:
+uses 豆包录音文件识别标准版, model 2.0:
 
-`POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash`
+1. `POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit`
+2. `POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/query`
 
-The request is JSON. `audio.data` is standard base64 of the uploaded bytes,
-so the file does not need a public URL. `audio.url` is not used. A filename
-suffix of wav, mp3, or ogg/opus is sent as `audio.format` (`ogg` also sets
-`codec` to `opus`). The body also sends `user.uid` and
-`request.model_name=bigmodel`. Headers are `X-Api-Resource-Id`
-(default `volc.bigasr.auc_turbo`), `X-Api-Request-Id` (a new UUID), and
-`X-Api-Sequence: -1`. The new speech console authenticates with `X-Api-Key`.
-An older console can omit that key and set `X-Api-App-Key` plus
-`X-Api-Access-Key` instead. When `VOLCANO_ASR_API_KEY` is set, the older
-pair is not sent.
+Flash is not the live default. The openspeech account behind this module
+cannot enable resource `volc.bigasr.auc_turbo` (status `45000030`, resource
+not granted). The console only offers 录音文件识别 2.0 标准版, which is
+already open. That standard resource is `volc.seedasr.auc`. The old flash
+URL `.../auc/bigmodel/recognize/flash` is not called. There is no
+`volcano_flash` backend. `VOLCANO_ASR_TIMEOUT` from the flash client is
+not read.
+
+The submit body is JSON. `audio.data` is standard base64 of the uploaded
+bytes, so the file does not need a public URL. `audio.url` is not sent.
+The published standard field table lists `audio.url` as the audio source.
+On this request schema, `audio.url` and `audio.data` are the two sources
+(the flash request docs call them 二选一 and say the other request fields
+match the standard API). Inline `audio.data` is what this process sends,
+because the meeting import only has bytes and this service has no object
+storage. A filename suffix of wav, mp3, ogg/opus, spx, amr, aac, or m4a
+is sent as `audio.format` (`ogg` and `opus` also set `codec` to `opus`).
+Unknown suffixes omit `format` and let the vendor reject the container.
+The body also sends `user.uid` and `request.model_name=bigmodel`.
+
+Submit headers are `X-Api-Resource-Id` (default `volc.seedasr.auc`),
+`X-Api-Request-Id` (a new UUID, reused as the task id), and
+`X-Api-Sequence: -1`. Query uses the same key headers and the same
+request id, with a JSON body of `{}`, and does not send `X-Api-Sequence`.
+The new speech console authenticates with `X-Api-Key`. An older console
+can omit that key and set `X-Api-App-Key` plus `X-Api-Access-Key` instead.
+When `VOLCANO_ASR_API_KEY` is set, the older pair is not sent. Set
+`VOLCANO_ASR_RESOURCE_ID=volc.bigasr.auc` only for model 1.0 standard.
+Do not point this path at `volc.bigasr.auc_turbo`.
 
 This key comes from the 豆包语音控制台 (openspeech). It is a different
 product from the Ark chat key. `VOLCANO_API_KEY` / `ARK_API_KEY` stay on
@@ -72,12 +95,29 @@ the minutes path and are not tried as a speech key. A missing or blank
 speech key raises `ProviderNotConfigured` and does not invent a transcript.
 The message points at the 豆包语音控制台, not at OpenAI.
 
-Flash accepts wav, mp3, and ogg opus, up to about 100MB and 2 hours.
-Longer recordings need the standard submit-and-query API, which this slice
-does not call. Volcano also recommends keeping a raw binary upload near
-20MB because of egress bandwidth; the hard cap enforced here is 100MB.
-A successful call returns `X-Api-Status-Code: 20000000` and
-`result.text`. Other status codes, including silence `20000003`, fail the
+Standard recognition accepts wav, mp3, ogg, spx, amr, aac, and m4a, up to
+512MB and 5 hours. The hard cap enforced here is 512MB. Base64 adds about
+a third to the JSON body and holds the file in memory. Volcano's inline
+upload note still asks to keep a raw binary near 20MB when egress is
+tight. Larger meeting files stay inline; a vendor rejection fails the run.
+
+Submit must return `X-Api-Status-Code: 20000000`. An empty submit body is
+normal. The task id is the request id we generated. Query then polls.
+`20000001` (processing) and `20000002` (queued) wait and retry. They do
+not become transcript text. The first wait is `VOLCANO_ASR_POLL_INTERVAL`
+(default 2 seconds). Each later wait doubles until
+`VOLCANO_ASR_POLL_MAX_INTERVAL` (default 15 seconds). Polling stops at
+`VOLCANO_ASR_POLL_TIMEOUT` (default 1800 seconds, 30 minutes) and fails
+the run. A multi-hour recording can raise that toward 10800 seconds. The
+vendor says a task usually finishes within 3 hours. Each HTTP call uses
+`VOLCANO_ASR_HTTP_TIMEOUT` (default 60 seconds). A dropped query
+connection retries until the poll budget. A dropped submit connection
+fails immediately. Import and live stop still block the request for the
+whole poll.
+
+A finished query returns `X-Api-Status-Code: 20000000` and `result.text`
+(or utterance text when the top-level text is absent). Other status
+codes, including silence `20000003`, fail the run. HTTP errors fail the
 run. The client does not substitute `fixtures/transcript.txt`.
 
 `ASR_BACKEND=openai` or `ASR_BACKEND=whisper` keeps the OpenAI path:
@@ -86,8 +126,7 @@ run. The client does not substitute `fixtures/transcript.txt`.
 OpenAI-HTTP endpoint. A missing or blank `OPENAI_API_KEY` on that path
 raises `ProviderNotConfigured` and does not invent a transcript. The
 default `MOCK_ASR=1` stays on the fixture even if a speech key or an
-OpenAI key is present. Doubao flash ASR waits `VOLCANO_ASR_TIMEOUT`
-seconds (default 180). Whisper keeps its own 120 second timeout.
+OpenAI key is present. Whisper keeps its own 120 second timeout.
 
 Set `MOCK_LLM=0` to call Volcano Ark
 `POST https://ark.cn-beijing.volces.com/api/v3/chat/completions`. The body is
