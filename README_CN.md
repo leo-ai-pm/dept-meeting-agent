@@ -30,6 +30,8 @@
 
 **Eigent** 是全球首个 **多智能体工作流** 桌面应用程序，帮助您构建、管理和部署定制化的 AI 工作团队，将最复杂的工作流程转化为自动化任务。作为领先的开源 Cowork产品，Eigent融合了开源 Cowork 和AI驱动自动化的优势。
 
+**会议效率（本 fork）。** 导入录音或文字稿，或会中一键录音。停止后即可审阅纪要和待办。飞书任务只在人工批准后写入。说明：[docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md)。环境变量与供应商行为：[backend/app/meeting/README.md](./backend/app/meeting/README.md)。
+
 基于 [CAMEL-AI][camel-site] 广受赞誉的开源项目，我们的系统引入了 **多智能体工作流**，通过并行执行、定制化和隐私保护 **提升生产力**。
 
 ### ⭐ 100% 开源 - 🥇 本地部署 - 🏆 MCP 集成

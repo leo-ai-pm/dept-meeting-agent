@@ -30,6 +30,8 @@
 
 **Eigent** is the open source Cowork desktop application, empowering you to build, manage, and deploy a custom AI workforce that can turn your most complex workflows into automated tasks. As a leading open-source Cowork product, Eigent brings together the best of open-source collaboration and AI-powered automation.
 
+**Meeting efficiency (this fork).** Import a recording or a transcript, or record in the meeting. Minutes and todos are ready at stop. Feishu tasks are written only after a person approves. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Operator flags: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
+
 Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system introduces a **Multi-Agent Workforce** that **boosts productivity** through parallel execution, customization, and privacy protection.
 
 ### ⭐ 100% Open Source - 🥇 Local Deployment - 🏆 MCP Integration
