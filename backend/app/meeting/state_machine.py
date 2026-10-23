@@ -41,7 +41,8 @@ ALL_STATES = frozenset(
 )
 
 # Import of a transcript skips transcribing (ingesting → drafting).
-# failed may retry the pipeline (→ ingesting) or a Feishu write.
+# failed may retry the pipeline (→ ingesting) or a Feishu write
+# (→ writing_feishu) while the review token is still active.
 # rejected may return to drafting or awaiting_review after a revision.
 ALLOWED: dict[str, frozenset[str]] = {
     CREATED: frozenset({INGESTING, FAILED}),

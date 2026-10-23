@@ -15,9 +15,14 @@
 """Feishu task-center adapters.
 
 One todo becomes one task. Idempotency uses the todo idempotency_key as
-the Feishu client token (`--idempotency-key` for lark-cli). Assignee
-strings that are not already open_ids are left unassigned. This module
-never maps a display name to an open_id.
+the Feishu client token (`--idempotency-key` for lark-cli, `client_token`
+on the enterprise task body). In-process adapters also remember a
+successful key and return that task id on a later call. The meeting
+service does not ask for a todo that already has a stored task id, so a
+retry does not depend on that memory surviving a restart.
+
+Assignee strings that are not already open_ids are left unassigned. This
+module never maps a display name to an open_id.
 
 `LarkCliFeishuTaskAdapter` is the default live backend. It shells out to
 the official `lark-cli` (`@larksuite/cli`) as the logged-in user.
