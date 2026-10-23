@@ -55,10 +55,9 @@ at lower precedence. The copied `.env` is gitignored. Do not commit it.
 CI and the acceptance page use the fixtures in `fixtures/` while the mock
 flags stay on.
 
-A missing vendor key does not stop the process from booting. Set a
-`MOCK_*` flag to `0` only when that vendor's key is in `.env`. The run
-fails and does not substitute the fixtures. This script does not check
-keys at startup.
+Run `scripts/meeting-dev.sh --check` before setting a `MOCK_*` flag to
+`0`. The same check runs before this script starts uvicorn. A missing
+live key stops startup. See [Config check](#config-check).
 
 Optional mock demo, while `scripts/meeting-dev.sh` is still up and still
 on the default mocks:
@@ -75,6 +74,27 @@ non-zero on failure. It does not leave a server running.
 Live vendors (Volcano speech, Ark minutes, `lark-cli`) are in the flags
 table below and in
 [docs/meeting-efficiency-harness.md](../../../docs/meeting-efficiency-harness.md).
+
+## Config check
+
+`scripts/meeting-dev.sh --check` prints required and optional variables
+for the current `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` values. It
+reads the same env files as the API. A value already in the shell wins.
+Secret values are not printed.
+
+| Flag | Required when it is `0` |
+| --- | --- |
+| `MOCK_LLM=0` | `VOLCANO_API_KEY` or `ARK_API_KEY` |
+| `MOCK_ASR=0` | `VOLCANO_ASR_API_KEY` (or the older console pair), unless `ASR_BACKEND` is `openai` or `whisper`, which needs `OPENAI_API_KEY` |
+| `MOCK_FEISHU=0` | `lark-cli` on `PATH` and a user identity of `ready` or `needs_refresh`, unless `FEISHU_BACKEND=enterprise`, which needs `FEISHU_APP_ID` and `FEISHU_APP_SECRET` |
+
+The check exits non-zero when a required item is missing and points at
+`env.example`. `scripts/meeting-dev.sh` with no arguments runs that check
+and does not start uvicorn when it fails. The default `MOCK_*=1` path
+has no required keys.
+
+Starting uvicorn without this script still boots. The run then fails
+with the missing key name and does not substitute fixtures.
 
 ## Local store
 

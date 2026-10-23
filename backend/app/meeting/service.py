@@ -35,6 +35,7 @@ from app.meeting.adapters.feishu import (
     LarkCliFeishuTaskAdapter,
     MockFeishuTaskAdapter,
     UnconfiguredFeishuTaskAdapter,
+    unknown_feishu_backend_message,
 )
 from app.meeting.adapters.minutes_llm import (
     _DEFAULT_TIMEOUT as _MINUTES_LLM_DEFAULT_TIMEOUT,
@@ -57,6 +58,7 @@ from app.meeting.adapters.transcriber import (
     Transcriber,
     UnconfiguredTranscriber,
     VolcanoDoubaoTranscriber,
+    unknown_asr_backend_message,
 )
 from app.meeting.errors import HardReject, MeetingServiceError
 from app.meeting.review_token import (
@@ -666,11 +668,7 @@ def _build_transcriber() -> Transcriber:
         return _build_openai_transcriber()
     if backend in _VOLCANO_ASR_BACKENDS:
         return _build_volcano_transcriber()
-    shown = backend[:80]
-    return UnconfiguredTranscriber(
-        "ASR_BACKEND must be volcano (default), openai, or whisper. "
-        f"Got {shown!r}. Set MOCK_ASR=1 to use the fixture."
-    )
+    return UnconfiguredTranscriber(unknown_asr_backend_message(backend))
 
 
 def _build_openai_transcriber() -> Transcriber:
@@ -811,10 +809,8 @@ def _build_feishu() -> FeishuTaskAdapter:
     if backend in {"lark_cli", "lark-cli", "cli"}:
         binary = os.environ.get("LARK_CLI_BIN", "").strip() or "lark-cli"
         return LarkCliFeishuTaskAdapter(binary=binary)
-    shown = backend[:80]
     return UnconfiguredFeishuTaskAdapter(
-        "FEISHU_BACKEND must be lark_cli (default) or enterprise. "
-        f"Got {shown!r}."
+        unknown_feishu_backend_message(backend)
     )
 
 

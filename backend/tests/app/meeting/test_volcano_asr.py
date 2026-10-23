@@ -724,6 +724,7 @@ def test_ark_minutes_key_does_not_select_doubao(monkeypatch):
     assert result["status"] == "failed"
     assert "豆包语音" in error
     assert "openspeech.bytedance.com" in error
+    assert "env.example" in error
     assert "OPENAI_API_KEY" not in error
     assert "ark-minutes-key" not in error
     assert _FIXTURE_MARK not in error

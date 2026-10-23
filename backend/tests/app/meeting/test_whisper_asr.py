@@ -67,6 +67,7 @@ def test_missing_key_with_mock_asr_off_does_not_invent_transcript(monkeypatch):
     assert "MOCK_ASR" in error
     assert "豆包语音" in error
     assert "openspeech" in error
+    assert "env.example" in error
     assert "OPENAI_API_KEY" not in error
     assert "ark-minutes-key" not in error
     assert "sk-test" not in error

@@ -51,18 +51,32 @@ _DEFAULT_LARK_CLI = "lark-cli"
 _DEFAULT_LARK_TIMEOUT = 30.0
 _ENTERPRISE_NOT_CONFIGURED = (
     "FEISHU_APP_ID and FEISHU_APP_SECRET are required when "
-    "FEISHU_BACKEND=enterprise"
+    "FEISHU_BACKEND=enterprise. Copy backend/app/meeting/env.example "
+    "to .env and fill both. Mock receipts are not used."
 )
 _LARK_MISSING_BINARY = (
     "lark-cli was not found. Install @larksuite/cli and ensure lark-cli "
-    "is on PATH, or set LARK_CLI_BIN to the binary."
+    "is on PATH, or set LARK_CLI_BIN in the env file copied from "
+    "backend/app/meeting/env.example. Mock receipts are not used."
 )
 _LARK_USER_NOT_READY = (
     "lark-cli user identity is not ready. Run `lark-cli auth login` "
     "for the task and contact domains, then check "
     "`lark-cli auth status --json` "
-    "(identities.user.status should be ready)."
+    "(identities.user.status should be ready). "
+    "See backend/app/meeting/env.example. Mock receipts are not used."
 )
+
+
+def unknown_feishu_backend_message(backend: str) -> str:
+    shown = (backend or "")[:80]
+    return (
+        "FEISHU_BACKEND must be lark_cli (default) or enterprise. "
+        f"Got {shown!r}. Copy backend/app/meeting/env.example to .env. "
+        "Mock receipts are not used."
+    )
+
+
 _USER_READY_STATUSES = {"ready", "needs_refresh"}
 _LEGACY_TOKEN_OK = {"", "valid", "ready", "needs_refresh"}
 
@@ -328,7 +342,9 @@ class LarkCliFeishuTaskAdapter:
                 return _LARK_MISSING_BINARY
             return (
                 f"lark-cli binary {self._binary!r} was not found. "
-                "Set LARK_CLI_BIN to an installed @larksuite/cli binary."
+                "Set LARK_CLI_BIN to an installed @larksuite/cli binary. "
+                "See backend/app/meeting/env.example. "
+                "Mock receipts are not used."
             )
         try:
             completed = self._run([self._binary, "auth", "status", "--json"])

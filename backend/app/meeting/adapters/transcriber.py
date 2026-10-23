@@ -85,12 +85,26 @@ VOLCANO_ASR_MISSING_KEY = (
     "https://openspeech.bytedance.com). "
     "VOLCANO_API_KEY is the Ark minutes key and is not an "
     "openspeech speech key. Older consoles may set "
-    "VOLCANO_ASR_APP_KEY and VOLCANO_ASR_ACCESS_KEY together."
+    "VOLCANO_ASR_APP_KEY and VOLCANO_ASR_ACCESS_KEY together. "
+    "Copy backend/app/meeting/env.example to .env and fill the "
+    "speech key there. fixtures/transcript.txt is not used."
 )
 OPENAI_ASR_MISSING_KEY = (
     "ASR provider is not configured. Set MOCK_ASR=1 or "
-    "OPENAI_API_KEY for OpenAI Whisper."
+    "OPENAI_API_KEY for OpenAI Whisper. "
+    "Copy backend/app/meeting/env.example to .env and fill "
+    "OPENAI_API_KEY. fixtures/transcript.txt is not used."
 )
+
+
+def unknown_asr_backend_message(backend: str) -> str:
+    shown = (backend or "")[:80]
+    return (
+        "ASR_BACKEND must be volcano (default), openai, or whisper. "
+        f"Got {shown!r}. This run does not read fixtures/transcript.txt. "
+        "Set MOCK_ASR=1 to use the fixture, or set ASR_BACKEND in the "
+        "env file copied from backend/app/meeting/env.example."
+    )
 
 
 class ProviderNotConfigured(RuntimeError):

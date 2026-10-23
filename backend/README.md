@@ -56,7 +56,9 @@ is set. `MOCK_LLM=0` calls Volcano Ark
 closed when the key is missing. `MOCK_FEISHU=0` creates tasks with `lark-cli`
 (`@larksuite/cli`) as the logged-in user and does not read `FEISHU_APP_ID` or
 `FEISHU_APP_SECRET`. Set `FEISHU_BACKEND=enterprise` only for the custom-app
-fallback. See `app/meeting/README.md`.
+fallback. `scripts/meeting-dev.sh --check` lists required and optional
+variables for the current mock flags and does not print secrets. The
+server is not started when that check fails. See `app/meeting/README.md`.
 
 ```bash
 # from the repository root

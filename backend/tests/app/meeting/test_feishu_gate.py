@@ -182,6 +182,7 @@ def test_unconfigured_feishu_does_not_consume_token_or_call_network():
     assert getattr(raised, "code", None) == "feishu_not_configured"
     assert "FEISHU_APP_ID" in str(raised)
     assert "FEISHU_BACKEND=enterprise" in str(raised)
+    assert "env.example" in str(raised)
     assert "enterprise app credentials" not in str(raised)
     assert adapter.calls == 0
     assert adapter.http_posts == 0
