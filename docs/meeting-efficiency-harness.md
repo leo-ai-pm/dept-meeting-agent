@@ -303,10 +303,15 @@ send `audio.format`, and the vendor can reject that file.
   `volc.bigasr.auc_turbo`.
 - No Postgres and no multi-user auth. Durability is one local SQLite
   file on the machine that runs the API (`MEETING_DB_PATH`, default
-  `backend/data/meeting.db`).
+  `backend/data/meeting.db`). A clone stays on that machine. The seam
+  for a later local multi-user change is
+  [docs/multi-user-extension.md](./multi-user-extension.md). v1 stores
+  every run as the user id `local`.
 
 ## Where to read next
 
+- Multi-user extension (deferred; the seam is in tree):
+  [docs/multi-user-extension.md](./multi-user-extension.md)
 - Flags and vendor behavior:
   [backend/app/meeting/README.md](../backend/app/meeting/README.md)
 - Routes: `backend/app/meeting/router.py`

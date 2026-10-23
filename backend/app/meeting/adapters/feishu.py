@@ -28,6 +28,12 @@ module never maps a display name to an open_id.
 the official `lark-cli` (`@larksuite/cli`) as the logged-in user.
 `EnterpriseFeishuTaskAdapter` remains an opt-in fallback that uses an
 enterprise custom app's tenant token.
+
+``FeishuWriteRequest.user_id`` is carried and ignored by every adapter
+in v1.
+
+# Extension: multi-user
+See docs/multi-user-extension.md.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.meeting.identity import LOCAL_USER_ID
 from app.meeting.schema import (
     build_task_body,
     compose_task_description,
@@ -95,6 +102,8 @@ class FeishuWriteRequest:
     run_id: str
     minutes_summary: dict[str, Any]
     todos: list[dict[str, Any]]
+    # Extension: multi-user — adapters do not read this in v1.
+    user_id: str = LOCAL_USER_ID
 
 
 class FeishuTaskAdapter(Protocol):

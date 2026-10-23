@@ -17,6 +17,12 @@
 `put` writes the run snapshot and does not replace the event log.
 `append_events` is the only writer of replay events. Review-token gate
 rows live in the same SQLite file as the runs; the HMAC secret does not.
+
+`get`, `put`, `list`, and `append_events` accept ``user_id``. v1 stores
+that id on the run and does not filter by it.
+
+# Extension: multi-user
+See docs/multi-user-extension.md.
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Protocol
 
+from app.meeting.identity import LOCAL_USER_ID, ignore_user_scope
 from app.meeting.review_token import TokenRecord
 
 logger = logging.getLogger("meeting.store")
@@ -46,6 +53,8 @@ class Run:
     created_at: str
     updated_at: str
     title: str | None = None
+    # Extension: multi-user — v1 writes LOCAL_USER_ID only.
+    user_id: str = LOCAL_USER_ID
     live_active: bool = False
     input_kind: str | None = None
     input_hash: str | None = None
@@ -67,14 +76,20 @@ class Run:
 
 
 class RunStore(Protocol):
-    def get(self, run_id: str) -> Run | None: ...
+    def get(
+        self, run_id: str, *, user_id: str | None = None
+    ) -> Run | None: ...
 
-    def put(self, run: Run) -> None: ...
+    def put(self, run: Run, *, user_id: str | None = None) -> None: ...
 
-    def list(self) -> list[Run]: ...
+    def list(self, *, user_id: str | None = None) -> list[Run]: ...
 
     def append_events(
-        self, run_id: str, events: list[dict[str, Any]]
+        self,
+        run_id: str,
+        events: list[dict[str, Any]],
+        *,
+        user_id: str | None = None,
     ) -> None: ...
 
 
@@ -126,14 +141,18 @@ class InMemoryRunStore:
         self._runs: dict[str, Run] = {}
         self._lock = threading.Lock()
 
-    def get(self, run_id: str) -> Run | None:
+    def get(self, run_id: str, *, user_id: str | None = None) -> Run | None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         with self._lock:
             stored = self._runs.get(run_id)
             if stored is None:
                 return None
             return copy.deepcopy(stored)
 
-    def put(self, run: Run) -> None:
+    def put(self, run: Run, *, user_id: str | None = None) -> None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         with self._lock:
             existing = self._runs.get(run.id)
             saved = copy.deepcopy(run)
@@ -143,7 +162,9 @@ class InMemoryRunStore:
                 saved.events = list(existing.events)
             self._runs[run.id] = saved
 
-    def list(self) -> list[Run]:
+    def list(self, *, user_id: str | None = None) -> list[Run]:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         with self._lock:
             ordered = sorted(
                 self._runs.values(),
@@ -151,7 +172,15 @@ class InMemoryRunStore:
             )
             return [copy.deepcopy(run) for run in ordered]
 
-    def append_events(self, run_id: str, events: list[dict[str, Any]]) -> None:
+    def append_events(
+        self,
+        run_id: str,
+        events: list[dict[str, Any]],
+        *,
+        user_id: str | None = None,
+    ) -> None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         if not events:
             return
         with self._lock:
@@ -233,7 +262,9 @@ class SqliteRunStore:
     def __exit__(self, *args: object) -> None:
         self.close()
 
-    def get(self, run_id: str) -> Run | None:
+    def get(self, run_id: str, *, user_id: str | None = None) -> Run | None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         with self._lock:
             conn = self._connection()
             row = conn.execute(
@@ -254,7 +285,9 @@ class SqliteRunStore:
         events = [json.loads(item["event_json"]) for item in event_rows]
         return _run_from_parts(payload, events)
 
-    def put(self, run: Run) -> None:
+    def put(self, run: Run, *, user_id: str | None = None) -> None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         blob = _dump(_snapshot_payload(run))
         with self._lock:
             self._connection().execute(
@@ -278,7 +311,9 @@ class SqliteRunStore:
                 ),
             )
 
-    def list(self) -> list[Run]:
+    def list(self, *, user_id: str | None = None) -> list[Run]:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         with self._lock:
             rows = (
                 self._connection()
@@ -288,12 +323,20 @@ class SqliteRunStore:
             ids = [row["id"] for row in rows]
         runs: list[Run] = []
         for run_id in ids:
-            loaded = self.get(run_id)
+            loaded = self.get(run_id, user_id=user_id)
             if loaded is not None:
                 runs.append(loaded)
         return runs
 
-    def append_events(self, run_id: str, events: list[dict[str, Any]]) -> None:
+    def append_events(
+        self,
+        run_id: str,
+        events: list[dict[str, Any]],
+        *,
+        user_id: str | None = None,
+    ) -> None:
+        # Extension: multi-user — user_id is not a filter in v1.
+        ignore_user_scope(user_id)
         if not events:
             return
         with self._lock:
