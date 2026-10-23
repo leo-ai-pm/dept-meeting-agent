@@ -39,6 +39,34 @@ scripts/meeting-mock-demo.sh
 How that script behaves is also in
 [docs/meeting-efficiency-harness.md](../../../docs/meeting-efficiency-harness.md).
 
+## Local store
+
+Runs survive a process restart. The API (`build_meeting_service`) stores
+them in SQLite, not in process memory. After uvicorn comes back, the same
+`run_id` still supports `GET /meeting/runs/{id}`, replay, approve/reject,
+and a Feishu write that carries a still-valid review token.
+
+The default file is `backend/data/meeting.db`. The parent directory is
+created if it is missing. That path is next to this backend package, so it
+does not follow the process working directory. Set `MEETING_DB_PATH` to
+move the file. A relative value is resolved from the working directory.
+`backend/data/` is gitignored.
+
+The file holds the run snapshot (status, transcript text, minutes, todos,
+frozen draft, `content_hash`, approval, active review-token id), the replay
+event log, review-token rows (id, content hash, expiry, consumed flag), and
+Feishu receipts. Audio bytes are not stored; the snapshot keeps the
+filename, byte count, and sha256. The review-token HMAC secret is not
+stored. Set `MEETING_REVIEW_TOKEN_SECRET` if a token issued before a
+restart must still verify. When that variable is unset, the process still
+mints an ephemeral secret and does not write it, so those tokens fail
+after a restart even though the run row remains.
+
+`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` still default to on. The store
+does not change adapter selection or the human gate: a Feishu write without
+a valid token is still a hard reject. Unit tests may pass an in-memory
+`RunStore`. There is no Postgres and no multi-user auth in this slice.
+
 ## Flags
 
 | Variable | Default | Effect |
@@ -66,8 +94,9 @@ How that script behaves is also in
 | `ARK_BASE_URL` | same default | Alias of `VOLCANO_BASE_URL` when that variable is unset or blank |
 | `MEETING_LLM_MODEL` | `doubao-seed-2-1-turbo-260628` | Ark `model` field: a Model ID or an inference endpoint ID (`ep-...`). Empty uses this default |
 | `MEETING_LLM_TIMEOUT` | `300` | Seconds for each Ark chat completions HTTP call when `MOCK_LLM=0`. Blank, non-numeric, or non-positive values keep 300. Not the ASR poll timeout |
+| `MEETING_DB_PATH` | `backend/data/meeting.db` | SQLite file for runs, replay, review-token gate state, and Feishu receipts. Parent directory is created. Unset uses the default next to this backend package. A relative path is cwd-relative |
 | `MEETING_REVIEW_TOKEN_TTL_SECONDS` | `3600` | Review token lifetime |
-| `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it |
+| `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it. Set this so review tokens still verify after a restart. The secret is not stored in the SQLite file |
 | `FEISHU_BACKEND` | `lark_cli` | Live backend when `MOCK_FEISHU=0`. `lark_cli` (also `lark-cli` or `cli`) runs `lark-cli`. `enterprise` selects the custom-app fallback |
 | `LARK_CLI_BIN` | `lark-cli` | Binary name or absolute path for the lark-cli adapter. Ignored when `MOCK_FEISHU=1` |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | unset | Enterprise custom app. Used only when `MOCK_FEISHU=0` and `FEISHU_BACKEND=enterprise`. Not read by the lark-cli path |

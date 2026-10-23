@@ -79,5 +79,8 @@ backend/benchmark/jobs/
 # Local Celery beat scheduler state
 server/celerybeat-schedule*
 
+# Meeting module local SQLite (default MEETING_DB_PATH)
+/backend/data/
+
 # TypeScript incremental build info
 *.tsbuildinfo

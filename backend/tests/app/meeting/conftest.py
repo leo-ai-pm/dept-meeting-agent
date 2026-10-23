@@ -12,8 +12,10 @@
 # limitations under the License.
 # ========= Copyright 2025-2026 @ Eigent.ai All Rights Reserved. =========
 
+import sys
 import time
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -23,6 +25,25 @@ from app.meeting.adapters.transcriber import MockTranscriber
 from app.meeting.review_token import ReviewTokenService
 from app.meeting.router import get_meeting_service, router
 from app.meeting.service import MeetingService
+
+
+@pytest.fixture(autouse=True)
+def isolate_meeting_db(monkeypatch, tmp_path):
+    """Keep factory SQLite files out of backend/data during tests."""
+
+    monkeypatch.setenv("MEETING_DB_PATH", str(tmp_path / "meeting.db"))
+    yield
+    # app.meeting re-exports the APIRouter as `.router`, which hides the
+    # submodule. The process-wide service lives on that module.
+    module = sys.modules.get("app.meeting.router")
+    if module is None:
+        return
+    service = getattr(module, "_service", None)
+    module._service = None
+    store = getattr(service, "store", None)
+    close = getattr(store, "close", None)
+    if callable(close):
+        close()
 
 
 def make_service(

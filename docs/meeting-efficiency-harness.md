@@ -9,9 +9,22 @@ Operator flags, vendor URLs, and the env table stay in
 This page does not copy that table and does not contain secrets. Names
 below are the variables already documented there.
 
-Runs live in process memory. A restart drops them. This is not an Eigent
-Space, Session, or Task, and it does not use those words as aliases for a
+Runs are stored in a local SQLite file so a restart keeps the same
+`run_id`. The default path is `backend/data/meeting.db`. `MEETING_DB_PATH`
+overrides it. GET, replay, approve/reject, and a Feishu write with a
+still-valid review token continue after the API process comes back. The
+HMAC secret is not in that file. Set `MEETING_REVIEW_TOKEN_SECRET` so a
+token issued before the restart still verifies. An unset secret stays
+ephemeral and is not written to disk. This is not an Eigent Space,
+Session, or Task, and it does not use those words as aliases for a
 meeting run.
+
+运行存在本地 SQLite 里，进程重启后同一个 `run_id` 还在。默认文件是
+`backend/data/meeting.db`，用 `MEETING_DB_PATH` 改路径。重启后仍可 GET、
+回放、批准或拒绝，并用仍然有效的 review token 写飞书。HMAC 密钥不进这个
+文件。要让重启前签发的 token 继续有效，必须设置
+`MEETING_REVIEW_TOKEN_SECRET`；不设置时密钥仍是进程内临时值，不会写入磁盘。
+这不是 Eigent 的 Space、Session 或 Task，文档里也不用这些词称呼一次会议运行。
 
 ## 会前 / Before
 
@@ -52,8 +65,8 @@ is no separate generate action.
 | --- | --- | --- |
 | Entry | Create a run, then import or record. Kernel `/runs` is untouched. | Mounted in `backend/app/router.py` as `meeting_router` (prefix `/meeting`). Routes in `backend/app/meeting/router.py`. Page in `backend/app/meeting/static/index.html` at `GET /meeting/ui`. |
 | Tools / adapters | Swap mock fixtures and live vendors without a second pipeline. | `backend/app/meeting/adapters/transcriber.py` (mock, Volcano standard, or Whisper), `adapters/minutes_llm.py` (mock or Volcano Ark), `adapters/feishu.py` (mock, `lark-cli`, or enterprise custom-app fallback). Selected in `build_meeting_service()` in `service.py`. |
-| State machine + replay | Illegal jumps fail. Every step is an event you can read back. | States in `backend/app/meeting/state_machine.py`. Events appended in `MeetingService` (`backend/app/meeting/service.py`). `GET /meeting/runs/{id}/replay`. |
-| Human gate | Feishu is unreachable until this run’s approved content is signed. | `POST /meeting/runs/{id}/review` with `approve`, `reject`, or `edit_approve`. Tokens in `backend/app/meeting/review_token.py` (HMAC, run id, content hash, TTL, one active id). |
+| State machine + replay | Illegal jumps fail. Every step is an event you can read back after a restart. | States in `backend/app/meeting/state_machine.py`. Events appended in `MeetingService` (`backend/app/meeting/service.py`) through `RunStore` (`backend/app/meeting/store.py`). Default file `backend/data/meeting.db`. `GET /meeting/runs/{id}/replay`. |
+| Human gate | Feishu is unreachable until this run’s approved content is signed. | `POST /meeting/runs/{id}/review` with `approve`, `reject`, or `edit_approve`. Tokens in `backend/app/meeting/review_token.py` (HMAC, run id, content hash, TTL, one active id). Consumed flags and the active id are in the same SQLite file. |
 | Export sink | One Feishu task per approved todo, or an in-process mock receipt. | `POST /meeting/runs/{id}/write_feishu_tasks`. `POST /meeting/runs/{id}/export_feishu` is the same function. |
 
 Default live adapters, when the matching mock flag is `0`:
@@ -224,8 +237,11 @@ send `audio.format`, and the vendor can reject that file.
   Stop does not write. Mock mode does not skip the gate.
 - No streaming ASR. Transcription starts when audio import or live stop
   submits the bytes.
-- No durable run store, no open_id lookup from a person’s name, and no
-  flash resource `volc.bigasr.auc_turbo`.
+- No open_id lookup from a person’s name, and no flash resource
+  `volc.bigasr.auc_turbo`.
+- No Postgres and no multi-user auth. Durability is one local SQLite
+  file on the machine that runs the API (`MEETING_DB_PATH`, default
+  `backend/data/meeting.db`).
 
 ## Where to read next
 
@@ -233,4 +249,5 @@ send `audio.format`, and the vendor can reject that file.
   [backend/app/meeting/README.md](../backend/app/meeting/README.md)
 - Routes: `backend/app/meeting/router.py`
 - Pipeline: `backend/app/meeting/service.py`
+- Store: `backend/app/meeting/store.py`
 - Tests: `backend/tests/app/meeting/`

@@ -12,7 +12,11 @@
 # limitations under the License.
 # ========= Copyright 2025-2026 @ Eigent.ai All Rights Reserved. =========
 
-"""Meeting run orchestration. In-memory, process-local, mock by default."""
+"""Meeting run orchestration. Mock adapters by default.
+
+The API persists runs through ``RunStore``. ``build_meeting_service``
+opens a local SQLite file. Tests may pass an in-memory store instead.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,6 @@ import os
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, NoReturn
 
@@ -82,6 +85,13 @@ from app.meeting.state_machine import (
     InvalidRunTransition,
     assert_transition,
 )
+from app.meeting.store import (
+    InMemoryRunStore,
+    Run,
+    RunStore,
+    SqliteRunStore,
+    meeting_db_path,
+)
 
 logger = logging.getLogger("meeting.service")
 
@@ -89,33 +99,6 @@ logger = logging.getLogger("meeting.service")
 def env_flag(name: str, default: str = "1") -> bool:
     raw = os.environ.get(name, default)
     return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-@dataclass
-class Run:
-    id: str
-    status: str
-    created_at: str
-    updated_at: str
-    title: str | None = None
-    live_active: bool = False
-    input_kind: str | None = None
-    input_hash: str | None = None
-    audio_filename: str | None = None
-    audio_bytes: int = 0
-    transcript: str | None = None
-    transcript_hash: str | None = None
-    minutes: dict[str, Any] | None = None
-    todos: list[dict[str, Any]] | None = None
-    final_minutes: dict[str, Any] | None = None
-    final_todos: list[dict[str, Any]] | None = None
-    content_hash: str | None = None
-    approved: bool = False
-    active_jti: str | None = None
-    feishu_receipts: list[dict[str, Any]] = field(default_factory=list)
-    events: list[dict[str, Any]] = field(default_factory=list)
-    error: str | None = None
-    seq: int = 0
 
 
 class MeetingService:
@@ -126,12 +109,15 @@ class MeetingService:
         minutes_llm: MinutesLLM,
         feishu: FeishuTaskAdapter,
         tokens: ReviewTokenService,
+        store: RunStore | None = None,
     ) -> None:
         self.transcriber = transcriber
         self.minutes_llm = minutes_llm
         self.feishu = feishu
         self.tokens = tokens
-        self._runs: dict[str, Run] = {}
+        # Production wiring is build_meeting_service(), which passes
+        # SQLite. Omitting the store keeps unit tests in memory.
+        self.store = store if store is not None else InMemoryRunStore()
         self._lock = threading.Lock()
 
     def create_run(self, title: str | None = None) -> dict[str, Any]:
@@ -144,7 +130,6 @@ class MeetingService:
             title=title.strip() if title else None,
         )
         with self._lock:
-            self._runs[run.id] = run
             self._event(
                 run,
                 "run.created",
@@ -618,18 +603,20 @@ class MeetingService:
         payload: dict[str, Any],
     ) -> None:
         run.seq += 1
-        run.events.append(
-            {
-                "seq": run.seq,
-                "at": _now(),
-                "type": event_type,
-                "summary": summary,
-                "payload": payload,
-            }
-        )
+        event = {
+            "seq": run.seq,
+            "at": _now(),
+            "type": event_type,
+            "summary": summary,
+            "payload": payload,
+        }
+        run.events.append(event)
+        # Snapshot first so the event row has a parent run.
+        self.store.put(run)
+        self.store.append_events(run.id, [event])
 
     def _require(self, run_id: str) -> Run:
-        run = self._runs.get(run_id)
+        run = self.store.get(run_id)
         if run is None:
             raise MeetingServiceError(
                 "run_not_found", "Run not found", status_code=404
@@ -788,12 +775,16 @@ def build_meeting_service() -> MeetingService:
         ttl = int(ttl_raw)
     except ValueError:
         ttl = 3600
-    tokens = ReviewTokenService(load_review_secret(), ttl_seconds=ttl)
+    store = SqliteRunStore(meeting_db_path())
+    tokens = ReviewTokenService(
+        load_review_secret(), ttl_seconds=ttl, ledger=store
+    )
     return MeetingService(
         transcriber=transcriber,
         minutes_llm=minutes_llm,
         feishu=feishu,
         tokens=tokens,
+        store=store,
     )
 
 
