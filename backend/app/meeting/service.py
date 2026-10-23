@@ -15,7 +15,11 @@
 """Meeting run orchestration. Mock adapters by default.
 
 The API persists runs through ``RunStore``. ``build_meeting_service``
-opens a local SQLite file. Tests may pass an in-memory store instead.
+opens a local SQLite file and installs ``SingleUserIdentity``. Tests
+may pass an in-memory store instead.
+
+# Extension: multi-user
+See docs/multi-user-extension.md.
 """
 
 from __future__ import annotations
@@ -61,6 +65,12 @@ from app.meeting.adapters.transcriber import (
     unknown_asr_backend_message,
 )
 from app.meeting.errors import HardReject, MeetingServiceError
+from app.meeting.identity import (
+    IdentityProvider,
+    SingleUserIdentity,
+    UserContext,
+    build_identity,
+)
 from app.meeting.review_token import (
     ReviewTokenError,
     ReviewTokenService,
@@ -112,6 +122,7 @@ class MeetingService:
         feishu: FeishuTaskAdapter,
         tokens: ReviewTokenService,
         store: RunStore | None = None,
+        identity: IdentityProvider | None = None,
     ) -> None:
         self.transcriber = transcriber
         self.minutes_llm = minutes_llm
@@ -120,31 +131,51 @@ class MeetingService:
         # Production wiring is build_meeting_service(), which passes
         # SQLite. Omitting the store keeps unit tests in memory.
         self.store = store if store is not None else InMemoryRunStore()
+        # Extension: multi-user — default is the single local user.
+        self.identity = (
+            identity if identity is not None else SingleUserIdentity()
+        )
         self._lock = threading.Lock()
 
-    def create_run(self, title: str | None = None) -> dict[str, Any]:
+    def create_run(
+        self,
+        title: str | None = None,
+        *,
+        user: UserContext | None = None,
+    ) -> dict[str, Any]:
         now = _now()
+        context = self._caller(user)
         run = Run(
             id=str(uuid.uuid4()),
             status=CREATED,
             created_at=now,
             updated_at=now,
             title=title.strip() if title else None,
+            user_id=context.user_id,
         )
         with self._lock:
             self._event(
                 run,
                 "run.created",
                 "Run created",
-                {"status": CREATED, "title": run.title},
+                {
+                    "status": CREATED,
+                    "title": run.title,
+                    "user_id": run.user_id,
+                },
             )
             return self._snapshot(run)
 
     def import_audio(
-        self, run_id: str, *, filename: str, content: bytes
+        self,
+        run_id: str,
+        *,
+        filename: str,
+        content: bytes,
+        user: UserContext | None = None,
     ) -> dict[str, Any]:
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             self._ensure_importable(run)
             self._retire_open_review(run)
             digest = sha256_bytes(content)
@@ -168,7 +199,13 @@ class MeetingService:
             )
             return self._snapshot(run)
 
-    def import_transcript(self, run_id: str, text: str) -> dict[str, Any]:
+    def import_transcript(
+        self,
+        run_id: str,
+        text: str,
+        *,
+        user: UserContext | None = None,
+    ) -> dict[str, Any]:
         cleaned = text.strip()
         if not cleaned:
             raise MeetingServiceError(
@@ -177,7 +214,7 @@ class MeetingService:
                 status_code=422,
             )
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             self._ensure_importable(run)
             self._retire_open_review(run)
             digest = sha256_text(cleaned)
@@ -201,9 +238,11 @@ class MeetingService:
             )
             return self._snapshot(run)
 
-    def live_start(self, run_id: str) -> dict[str, Any]:
+    def live_start(
+        self, run_id: str, *, user: UserContext | None = None
+    ) -> dict[str, Any]:
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             if run.status != CREATED or run.live_active:
                 raise MeetingServiceError(
                     "conflict",
@@ -220,10 +259,15 @@ class MeetingService:
             return self._snapshot(run)
 
     def live_stop(
-        self, run_id: str, *, filename: str, content: bytes | None
+        self,
+        run_id: str,
+        *,
+        filename: str,
+        content: bytes | None,
+        user: UserContext | None = None,
     ) -> dict[str, Any]:
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             if not run.live_active or run.status != CREATED:
                 raise MeetingServiceError(
                     "conflict",
@@ -264,22 +308,28 @@ class MeetingService:
             )
             return self._snapshot(run)
 
-    def get_run(self, run_id: str) -> dict[str, Any]:
+    def get_run(
+        self, run_id: str, *, user: UserContext | None = None
+    ) -> dict[str, Any]:
         with self._lock:
-            return self._snapshot(self._require(run_id))
+            return self._snapshot(self._require(run_id, user))
 
-    def replay(self, run_id: str) -> dict[str, Any]:
+    def replay(
+        self, run_id: str, *, user: UserContext | None = None
+    ) -> dict[str, Any]:
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             return {
                 "run_id": run.id,
                 "status": run.status,
                 "events": [dict(event) for event in run.events],
             }
 
-    def get_draft(self, run_id: str) -> dict[str, Any]:
+    def get_draft(
+        self, run_id: str, *, user: UserContext | None = None
+    ) -> dict[str, Any]:
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             if run.minutes is None or run.todos is None:
                 raise MeetingServiceError(
                     "draft_not_ready",
@@ -300,6 +350,8 @@ class MeetingService:
         run_id: str,
         decision: str,
         edits: dict[str, Any] | None = None,
+        *,
+        user: UserContext | None = None,
     ) -> dict[str, Any]:
         if decision not in {"approve", "reject", "edit_approve"}:
             raise MeetingServiceError(
@@ -308,7 +360,7 @@ class MeetingService:
                 status_code=422,
             )
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             if run.status != AWAITING_REVIEW:
                 raise MeetingServiceError(
                     "conflict",
@@ -325,6 +377,7 @@ class MeetingService:
         review_token: str | None,
         *,
         tool_name: str = "write_feishu_tasks",
+        user: UserContext | None = None,
     ) -> dict[str, Any]:
         """Create one Feishu task per approved todo.
 
@@ -336,7 +389,7 @@ class MeetingService:
         """
 
         with self._lock:
-            run = self._require(run_id)
+            run = self._require(run_id, user)
             token = (review_token or "").strip()
             if not token:
                 self._hard_reject(run, "missing_token", tool_name)
@@ -347,6 +400,7 @@ class MeetingService:
                     run_id=run.id,
                     content_hash=current_hash,
                     active_jti=run.active_jti,
+                    user_id=run.user_id,
                 )
             except ReviewTokenError as exc:
                 self._hard_reject(run, exc.reason, tool_name)
@@ -405,6 +459,7 @@ class MeetingService:
                     run_id=run.id,
                     minutes_summary=summary,
                     todos=pending,
+                    user_id=run.user_id,
                 )
                 try:
                     fresh = self.feishu.write_tasks(request)
@@ -521,7 +576,9 @@ class MeetingService:
         run.final_todos = todos
         run.content_hash = digest
         run.approved = True
-        token, jti, exp = self.tokens.issue(run.id, digest)
+        token, jti, exp = self.tokens.issue(
+            run.id, digest, user_id=run.user_id
+        )
         run.active_jti = jti
         event_type = (
             "review.edit_approved"
@@ -716,11 +773,19 @@ class MeetingService:
         }
         run.events.append(event)
         # Snapshot first so the event row has a parent run.
-        self.store.put(run)
-        self.store.append_events(run.id, [event])
+        # Extension: multi-user — user_id is stored and not used as a filter.
+        self.store.put(run, user_id=run.user_id)
+        self.store.append_events(run.id, [event], user_id=run.user_id)
 
-    def _require(self, run_id: str) -> Run:
-        run = self.store.get(run_id)
+    def _caller(self, user: UserContext | None) -> UserContext:
+        if user is not None:
+            return user
+        return self.identity.current()
+
+    def _require(self, run_id: str, user: UserContext | None = None) -> Run:
+        context = self._caller(user)
+        # Extension: multi-user — the id is passed through and not applied.
+        run = self.store.get(run_id, user_id=context.user_id)
         if run is None:
             raise MeetingServiceError(
                 "run_not_found", "Run not found", status_code=404
@@ -739,6 +804,7 @@ class MeetingService:
             "id": run.id,
             "status": run.status,
             "title": run.title,
+            "user_id": run.user_id,
             "live_active": run.live_active,
             "error": run.error,
             "input": {
@@ -885,6 +951,7 @@ def build_meeting_service() -> MeetingService:
         feishu=feishu,
         tokens=tokens,
         store=store,
+        identity=build_identity(),
     )
 
 

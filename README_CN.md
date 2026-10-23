@@ -43,6 +43,8 @@ scripts/meeting-dev.sh
 
 打开 <http://127.0.0.1:5001/meeting/ui>。进程起来后 `GET /health` 返回 `status: ok`。在该终端按 Ctrl+C 停止。默认 mock 仍开着时，可选：`MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`。说明：[docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md)。环境变量与真实供应商：[backend/app/meeting/README.md](./backend/app/meeting/README.md)。
 
+扩展：多用户尚未实现。本机后续怎么接，见 [docs/multi-user-extension.md](./docs/multi-user-extension.md)。
+
 基于 [CAMEL-AI][camel-site] 广受赞誉的开源项目，我们的系统引入了 **多智能体工作流**，通过并行执行、定制化和隐私保护 **提升生产力**。
 
 ### ⭐ 100% 开源 - 🥇 本地部署 - 🏆 MCP 集成

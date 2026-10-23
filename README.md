@@ -43,6 +43,8 @@ Before turning `MOCK_ASR`, `MOCK_LLM`, or `MOCK_FEISHU` off, run `scripts/meetin
 
 Open <http://127.0.0.1:5001/meeting/ui>. `GET /health` returns `status: ok` when the process is up. Stop the script with Ctrl+C. Optional, while that server is still on the default mocks: `MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Flags and live vendors: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
 
+Extension: multi-user. The local seam is [docs/multi-user-extension.md](./docs/multi-user-extension.md). v1 stays single-user on this machine.
+
 Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system introduces a **Multi-Agent Workforce** that **boosts productivity** through parallel execution, customization, and privacy protection.
 
 ### ⭐ 100% Open Source - 🥇 Local Deployment - 🏆 MCP Integration

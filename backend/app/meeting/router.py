@@ -12,7 +12,14 @@
 # limitations under the License.
 # ========= Copyright 2025-2026 @ Eigent.ai All Rights Reserved. =========
 
-"""Meeting-domain routes. Mounted at /meeting so kernel /runs stays intact."""
+"""Meeting-domain routes. Mounted at /meeting so kernel /runs stays intact.
+
+Run routes accept ``X-Meeting-User`` and ignore the value. v1 resolves
+every caller through ``SingleUserIdentity``.
+
+# Extension: multi-user
+See docs/multi-user-extension.md.
+"""
 
 from __future__ import annotations
 
@@ -22,11 +29,12 @@ import threading
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.meeting.errors import HardReject, MeetingServiceError
+from app.meeting.identity import MEETING_USER_HEADER, UserContext
 from app.meeting.service import MeetingService, build_meeting_service
 
 router = APIRouter(prefix="/meeting")
@@ -46,6 +54,27 @@ def get_meeting_service() -> MeetingService:
 
 
 ServiceDep = Annotated[MeetingService, Depends(get_meeting_service)]
+
+
+def resolve_request_user(
+    service: ServiceDep,
+    x_meeting_user: Annotated[
+        str | None,
+        Header(alias=MEETING_USER_HEADER),
+    ] = None,
+) -> UserContext:
+    """Resolve the caller. v1 ignores the header value.
+
+    # Extension: multi-user
+    ``X-Meeting-User`` is passed to ``IdentityProvider.current`` and
+    discarded by ``SingleUserIdentity``. ``/meeting/ui`` does not read
+    it. See docs/multi-user-extension.md.
+    """
+
+    return service.identity.current(presented=x_meeting_user)
+
+
+UserDep = Annotated[UserContext, Depends(resolve_request_user)]
 
 
 def reset_meeting_service(
@@ -130,10 +159,11 @@ def meeting_ui() -> HTMLResponse:
 @router.post("/runs", status_code=201)
 def create_run(
     service: ServiceDep,
+    user: UserDep,
     body: CreateRunBody | None = None,
 ) -> dict[str, Any]:
     title = body.title if body else None
-    return _call(service.create_run, title)
+    return _call(service.create_run, title, user=user)
 
 
 @router.post("/runs/{run_id}/import/audio")
@@ -141,6 +171,7 @@ def import_audio(
     run_id: str,
     body: ImportAudioBody,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
     content = _decode_base64(body.content_base64)
     return _call(
@@ -148,6 +179,7 @@ def import_audio(
         run_id,
         filename=body.filename,
         content=content,
+        user=user,
     )
 
 
@@ -156,51 +188,63 @@ def import_transcript(
     run_id: str,
     body: ImportTranscriptBody,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    return _call(service.import_transcript, run_id, body.text)
+    return _call(service.import_transcript, run_id, body.text, user=user)
 
 
 @router.post("/runs/{run_id}/live/start")
 def live_start(
     run_id: str,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    return _call(service.live_start, run_id)
+    return _call(service.live_start, run_id, user=user)
 
 
 @router.post("/runs/{run_id}/live/stop")
 def live_stop(
     service: ServiceDep,
+    user: UserDep,
     run_id: str,
     body: LiveStopBody | None = None,
 ) -> dict[str, Any]:
     filename = body.filename if body else "live-recording.bin"
     content = _decode_base64(body.content_base64 if body else None)
-    return _call(service.live_stop, run_id, filename=filename, content=content)
+    return _call(
+        service.live_stop,
+        run_id,
+        filename=filename,
+        content=content,
+        user=user,
+    )
 
 
 @router.get("/runs/{run_id}")
 def get_run(
     run_id: str,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    return _call(service.get_run, run_id)
+    return _call(service.get_run, run_id, user=user)
 
 
 @router.get("/runs/{run_id}/replay")
 def replay_run(
     run_id: str,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    return _call(service.replay, run_id)
+    return _call(service.replay, run_id, user=user)
 
 
 @router.get("/runs/{run_id}/draft")
 def get_draft(
     run_id: str,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    return _call(service.get_draft, run_id)
+    return _call(service.get_draft, run_id, user=user)
 
 
 @router.post("/runs/{run_id}/review")
@@ -208,14 +252,16 @@ def review_run(
     run_id: str,
     body: ReviewBody,
     service: ServiceDep,
+    user: UserDep,
 ) -> dict[str, Any]:
     edits = body.edits.model_dump() if body.edits else None
-    return _call(service.review, run_id, body.decision, edits)
+    return _call(service.review, run_id, body.decision, edits, user=user)
 
 
 @router.post("/runs/{run_id}/write_feishu_tasks")
 def write_feishu_tasks(
     service: ServiceDep,
+    user: UserDep,
     run_id: str,
     body: WriteFeishuBody | None = None,
 ) -> dict[str, Any]:
@@ -225,16 +271,22 @@ def write_feishu_tasks(
         run_id,
         token,
         tool_name="write_feishu_tasks",
+        user=user,
     )
 
 
 @router.post("/runs/{run_id}/export_feishu")
 def export_feishu(
     service: ServiceDep,
+    user: UserDep,
     run_id: str,
     body: WriteFeishuBody | None = None,
 ) -> dict[str, Any]:
     token = body.review_token if body else None
     return _call(
-        service.write_feishu, run_id, token, tool_name="export_feishu"
+        service.write_feishu,
+        run_id,
+        token,
+        tool_name="export_feishu",
+        user=user,
     )

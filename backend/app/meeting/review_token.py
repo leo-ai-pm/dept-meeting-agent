@@ -21,6 +21,13 @@ must not create another task.
 
 Token records can live in memory or in the meeting SQLite file. The HMAC
 secret is never written to that file.
+
+``issue`` and ``validate`` accept ``user_id`` and do not put it in the
+HMAC body. A v1 token stays
+``v1.{run_id}.{content_hash}.{exp}.{jti}.{sig}``.
+
+# Extension: multi-user
+See docs/multi-user-extension.md.
 """
 
 from __future__ import annotations
@@ -33,6 +40,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Protocol
+
+from app.meeting.identity import ignore_user_scope
 
 TOKEN_PREFIX = "v1"
 
@@ -140,7 +149,15 @@ class ReviewTokenService:
         )
         self._lock = threading.Lock()
 
-    def issue(self, run_id: str, content_hash: str) -> tuple[str, str, int]:
+    def issue(
+        self,
+        run_id: str,
+        content_hash: str,
+        *,
+        user_id: str | None = None,
+    ) -> tuple[str, str, int]:
+        # Extension: multi-user — user_id is not part of the HMAC body.
+        ignore_user_scope(user_id)
         jti = secrets.token_hex(16)
         exp = int(self._clock()) + int(self._ttl)
         token = self._sign(run_id, content_hash, exp, jti)
@@ -161,7 +178,10 @@ class ReviewTokenService:
         run_id: str,
         content_hash: str,
         active_jti: str | None,
+        user_id: str | None = None,
     ) -> TokenRecord:
+        # Extension: multi-user — user_id is not part of the HMAC body.
+        ignore_user_scope(user_id)
         record = self._parse(token)
         if record.run_id != run_id:
             raise ReviewTokenError("run_mismatch")

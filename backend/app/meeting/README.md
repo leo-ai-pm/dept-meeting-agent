@@ -122,7 +122,18 @@ after a restart even though the run row remains.
 `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` still default to on. The store
 does not change adapter selection or the human gate: a Feishu write without
 a valid token is still a hard reject. Unit tests may pass an in-memory
-`RunStore`. There is no Postgres and no multi-user auth in this slice.
+`RunStore`. There is no Postgres in this slice.
+
+## Identity
+
+v1 is one local user. `build_meeting_service` installs
+`SingleUserIdentity` from `backend/app/meeting/identity.py`. Every new
+run stores `user_id` `local`. `MEETING_USER_ID` and the request header
+`X-Meeting-User` are reserved. The process reads them and drops them,
+including when they are set, so the SQLite file stays one file and the
+Feishu login stays the one already on this machine. `/meeting/ui` does
+not read the header. There is no login and no user table. Contributors:
+[docs/multi-user-extension.md](../../../docs/multi-user-extension.md).
 
 ## Flags
 
