@@ -34,6 +34,7 @@ from app.meeting.adapters.feishu import (
     UnconfiguredFeishuTaskAdapter,
 )
 from app.meeting.adapters.minutes_llm import (
+    _DEFAULT_TIMEOUT as _MINUTES_LLM_DEFAULT_TIMEOUT,
     VOLCANO_DEFAULT_BASE_URL,
     VOLCANO_DEFAULT_MODEL,
     MinutesLLM,
@@ -771,6 +772,10 @@ def _build_minutes_llm() -> MinutesLLM:
         or VOLCANO_DEFAULT_BASE_URL,
         model=os.environ.get("MEETING_LLM_MODEL", "").strip()
         or VOLCANO_DEFAULT_MODEL,
+        timeout=_positive_float(
+            os.environ.get("MEETING_LLM_TIMEOUT", ""),
+            _MINUTES_LLM_DEFAULT_TIMEOUT,
+        ),
     )
 
 

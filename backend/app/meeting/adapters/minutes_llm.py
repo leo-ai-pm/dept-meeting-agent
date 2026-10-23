@@ -31,8 +31,10 @@ _TODOS = _ROOT / "todos.json"
 # POST {base}/chat/completions. Do not use the control-plane host.
 VOLCANO_DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 VOLCANO_DEFAULT_MODEL = "doubao-seed-2-1-turbo-260628"
-# Deep-thinking replies can run past two minutes.
-_DEFAULT_TIMEOUT = 180.0
+# Deep-thinking replies can run past two minutes. Live extract_todos
+# took about 173s and hit a 180s client timeout, so the default wait
+# is 300s. MEETING_LLM_TIMEOUT overrides this in build_meeting_service.
+_DEFAULT_TIMEOUT = 300.0
 _DECISION_MIN = 3
 _DECISION_MAX = 5
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

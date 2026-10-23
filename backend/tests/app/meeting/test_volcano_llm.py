@@ -79,6 +79,7 @@ def _clear_llm_env(monkeypatch) -> None:
         "VOLCANO_BASE_URL",
         "ARK_BASE_URL",
         "MEETING_LLM_MODEL",
+        "MEETING_LLM_TIMEOUT",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -175,12 +176,34 @@ def test_default_ark_target_when_optional_env_is_blank(monkeypatch):
     monkeypatch.setenv("VOLCANO_BASE_URL", "  ")
     monkeypatch.delenv("ARK_BASE_URL", raising=False)
     monkeypatch.setenv("MEETING_LLM_MODEL", "")
+    monkeypatch.delenv("MEETING_LLM_TIMEOUT", raising=False)
     service = build_meeting_service()
     assert service.minutes_llm._url == (
         "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
     )
     assert service.minutes_llm._model == "doubao-seed-2-1-turbo-260628"
-    assert service.minutes_llm._client.timeout == httpx.Timeout(180.0)
+    assert service.minutes_llm._client.timeout == httpx.Timeout(300.0)
+
+
+def test_meeting_llm_timeout_overrides_client_timeout(monkeypatch):
+    monkeypatch.setenv("MOCK_LLM", "0")
+    monkeypatch.setenv("VOLCANO_API_KEY", "volcano-key")
+    monkeypatch.setenv("MEETING_LLM_TIMEOUT", "420")
+    service = build_meeting_service()
+    assert service.minutes_llm._client.timeout == httpx.Timeout(420.0)
+
+    monkeypatch.setenv("MEETING_LLM_TIMEOUT", "nope")
+    assert build_meeting_service().minutes_llm._client.timeout == (
+        httpx.Timeout(300.0)
+    )
+    monkeypatch.setenv("MEETING_LLM_TIMEOUT", "0")
+    assert build_meeting_service().minutes_llm._client.timeout == (
+        httpx.Timeout(300.0)
+    )
+    monkeypatch.setenv("MEETING_LLM_TIMEOUT", "-5")
+    assert build_meeting_service().minutes_llm._client.timeout == (
+        httpx.Timeout(300.0)
+    )
 
 
 def test_chat_completions_maps_vendor_json_and_skips_fixtures():
