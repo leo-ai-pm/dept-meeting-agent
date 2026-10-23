@@ -3,9 +3,10 @@
 # fixtures/transcript.txt, and exits non-zero unless status is awaiting_review.
 # Prints the draft title, todo count, and replay event types.
 #
-# Does not leave a server running. To click through the acceptance page:
-#   cd backend && uv run uvicorn main:api --port 5001
-# Then open http://127.0.0.1:5001/meeting/ui
+# Does not leave a server running. To click through the acceptance page,
+# leave scripts/meeting-dev.sh running and open
+# http://127.0.0.1:5001/meeting/ui
+# Stop that server with Ctrl+C.
 #
 # Reuse a server that is already on the default mocks:
 #   MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh

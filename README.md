@@ -30,7 +30,16 @@
 
 **Eigent** is the open source Cowork desktop application, empowering you to build, manage, and deploy a custom AI workforce that can turn your most complex workflows into automated tasks. As a leading open-source Cowork product, Eigent brings together the best of open-source collaboration and AI-powered automation.
 
-**Meeting efficiency (this fork).** Import a recording or a transcript, or record in the meeting. Minutes and todos are ready at stop. Feishu tasks are written only after a person approves. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Operator flags: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
+**Meeting efficiency (this fork).** Import a recording or a transcript, or record in the meeting. Minutes and todos are ready at stop. Feishu tasks are written only after a person approves. On a clean machine, with [uv](https://docs.astral.sh/uv/) installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`; `uv sync` fetches Python 3.11):
+
+```bash
+git clone https://github.com/leo-ai-pm/dept-meeting-agent.git
+cd dept-meeting-agent
+cp backend/app/meeting/env.example .env
+scripts/meeting-dev.sh
+```
+
+Open <http://127.0.0.1:5001/meeting/ui>. `GET /health` returns `status: ok` when the process is up. Stop the script with Ctrl+C. Optional, while that server is still on the default mocks: `MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Flags and live vendors: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
 
 Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system introduces a **Multi-Agent Workforce** that **boosts productivity** through parallel execution, customization, and privacy protection.
 

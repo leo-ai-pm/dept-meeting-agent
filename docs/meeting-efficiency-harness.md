@@ -52,10 +52,19 @@ then stops at `awaiting_review`. A person approves before a one-time
 carries that token. Reject issues no token and writes nothing.
 
 Acceptance UI: [http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui)
-when the API is served from `backend/` on port 5001. The page is
-Simplified Chinese first. The controls still read Create run, Import
-transcript, Start live, Stop live, Approve, Reject, Write with token,
-Write without token, and Replay. `MOCK_ASR`, `MOCK_LLM`, and
+when the API is served from `backend/` on port 5001. From a fresh clone,
+`scripts/meeting-dev.sh` installs backend dependencies and serves that
+address. Stop it with Ctrl+C. `GET /health` is the existing Eigent health
+route (`status: ok`). Steps and the env file:
+[backend/app/meeting/README.md](../backend/app/meeting/README.md).
+
+干净克隆后，在仓库根目录运行 `scripts/meeting-dev.sh`。它安装后端依赖，
+并在 `127.0.0.1:5001` 提供验收页。Ctrl+C 停止。`GET /health` 是现成的
+健康检查（`status: ok`）。步骤和 env 文件见会议 README。
+
+The page is Simplified Chinese first. The controls still read Create run,
+Import transcript, Start live, Stop live, Approve, Reject, Write with
+token, Write without token, and Replay. `MOCK_ASR`, `MOCK_LLM`, and
 `MOCK_FEISHU` default to on, so that page and CI need no API keys. There
 is no separate generate action.
 
@@ -150,8 +159,9 @@ asserts.
 
 Mock (default, no keys):
 
-1. From `backend/`, run `uv run uvicorn main:api --port 5001` with
-   `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` unset or `1`.
+1. From the repository root, run `scripts/meeting-dev.sh` with
+   `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` unset or `1`. Stop it later
+   with Ctrl+C. `GET /health` is ok when the process is up.
 2. Open `/meeting/ui`. Create run. Import the sample transcript.
    Status becomes `awaiting_review` and Draft shows minutes and todos.
 3. Reject. Replay includes `review.rejected`. Write with token is
@@ -196,13 +206,14 @@ From the repository root:
 scripts/meeting-mock-demo.sh
 ```
 
-To click through `/meeting/ui`, start the API yourself and leave it up:
+To click through `/meeting/ui`, leave the dev server up:
 
 ```bash
-cd backend && uv run uvicorn main:api --port 5001
+scripts/meeting-dev.sh
 ```
 
-Open [http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui).
+Stop it with Ctrl+C. Open
+[http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui).
 Unset mock flags stay on.
 `MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`
 sends the same curl calls to that server instead of starting one. That
