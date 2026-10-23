@@ -9,7 +9,7 @@ This file remains the operator reference for flags and vendor behavior.
 
 ## Run locally
 
-A clone can open the acceptance page on this machine. No cloud host and
+A clone can open the recording card on this machine. No cloud host and
 no API keys. `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` stay on until you
 change them.
 
@@ -35,16 +35,18 @@ backgrounded the script, the process writes `backend/runtime/run.pid`
 after startup; `kill` that pid. `backend/data/` and `backend/runtime/`
 are gitignored.
 
-Acceptance page: <http://127.0.0.1:5001/meeting/ui>
+Recording card: <http://127.0.0.1:5001/meeting/ui>
 
 `GET /health` is the existing Eigent health route. It returns
 `{"status":"ok","service":"eigent"}` when this process is up. `GET /`
-points at that route. `GET /meeting/ui` is the acceptance page. This
-slice does not add another health service.
+points at that route. `GET /meeting/ui` is a compact capture card titled
+快速录音. This slice does not add another health service.
 
-The page copy is Simplified Chinese first. Buttons keep the English names
-Create run, Import transcript, Start live, Stop live, Approve, Reject,
-Write with token, Write without token, and Replay.
+The card is Simplified Chinese. It shows an elapsed timer and three
+controls: 开始录音, 暂停, and 停止. 暂停 stays in the browser.
+停止 uploads through `live/stop` and shows 已保存 or a short error.
+Minutes, review, and Feishu write stay on the API. Use
+`scripts/meeting-mock-demo.sh` for the mock pipeline.
 
 The script sets each of `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` to `1`
 only when that variable is unset in the shell and unset in `.env`,
@@ -52,7 +54,7 @@ only when that variable is unset in the shell and unset in `.env`,
 A value already in the shell wins over the file. Other variables stay in
 the file. The API loads those files on startup, and also `~/.eigent/.env`
 at lower precedence. The copied `.env` is gitignored. Do not commit it.
-CI and the acceptance page use the fixtures in `fixtures/` while the mock
+CI and the recording card use the fixtures in `fixtures/` while the mock
 flags stay on.
 
 Run `scripts/meeting-dev.sh --check` before setting a `MOCK_*` flag to
@@ -314,13 +316,17 @@ does not consume the review token.
 | POST | `/meeting/runs/{id}/write_feishu_tasks` | requires `review_token` |
 | POST | `/meeting/runs/{id}/export_feishu` | same gate, alias |
 
-`/meeting/ui` records in the browser. Start live calls `getUserMedia` and
-`MediaRecorder`. Stop live posts JSON `filename` and `content_base64`, the
-same shape as audio import. The page prefers `audio/ogg;codecs=opus`
-(`.ogg`) or `audio/mp4` (`.m4a`), which standard Volcano ASR accepts, and
-otherwise `audio/webm`. Those bytes follow the import/audio ASR path
-(`MOCK_ASR`, `ASR_BACKEND`, Volcano standard submit/query, or Whisper) and
-stop at `awaiting_review`. Feishu writes still require human review.
+`/meeting/ui` is capture-only. 开始录音 calls `getUserMedia` and
+`MediaRecorder`, then `POST .../live/start`. 暂停 calls
+`MediaRecorder.pause` and does not hit the API. 停止 posts JSON
+`filename` and `content_base64`, the same shape as audio import. The
+card prefers `audio/ogg;codecs=opus` (`.ogg`) or `audio/mp4` (`.m4a`),
+which standard Volcano ASR accepts, and otherwise `audio/webm`. Those
+bytes follow the import/audio ASR path (`MOCK_ASR`, `ASR_BACKEND`,
+Volcano standard submit/query, or Whisper) and stop at `awaiting_review`.
+The card shows 已保存 or a short error and does not render minutes,
+review, or Feishu controls. Feishu writes still require human review on
+the API.
 
 `MOCK_ASR=1` may call live stop with an empty body. The service then uses
 `mock-live:{id}` so CI can run without a microphone. `MOCK_ASR=0` rejects

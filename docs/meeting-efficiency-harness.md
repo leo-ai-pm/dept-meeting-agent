@@ -38,18 +38,19 @@ has accepted the draft.
 
 ## 会后 / After
 
-双入口，停在同一条流水线。会前或会后可以导入录音或文字稿；会中可以在
-验收页一键开始 / 停止录音。导入或停止的同一次请求里跑完识别（文字稿
+双入口，停在同一条流水线。会前或会后通过接口导入录音或文字稿；会中在
+`/meeting/ui` 的快速录音卡片上开始、暂停、停止。停止或导入的同一次请求里跑完识别（文字稿
 跳过识别）、纪要和待办，状态停在 `awaiting_review`。人批准后才签发
 一次性 `review_token`。飞书任务只在带着该 token 的写请求里创建。拒绝
-不发 token，也不写飞书。
+不发 token，也不写飞书。这张卡片只采集录音，不展示纪要、审阅或飞书写入。
 
-Two entries, one pipeline. Import a recording or a transcript, or use
-in-meeting one-click record on the acceptance page. The import or stop
-request itself runs ASR (skipped for a transcript), minutes, and todos,
-then stops at `awaiting_review`. A person approves before a one-time
+Two entries, one pipeline. Import a recording or a transcript through the
+API, or record on the `/meeting/ui` card (start, pause, stop). The import
+or stop request itself runs ASR (skipped for a transcript), minutes, and
+todos, then stops at `awaiting_review`. A person approves before a one-time
 `review_token` is issued. Feishu tasks are created only by a write that
-carries that token. Reject issues no token and writes nothing.
+carries that token. Reject issues no token and writes nothing. The card
+only captures audio. It does not show minutes, review, or Feishu write.
 
 Acceptance UI: [http://127.0.0.1:5001/meeting/ui](http://127.0.0.1:5001/meeting/ui)
 when the API is served from `backend/` on port 5001. From a fresh clone,
@@ -59,14 +60,15 @@ route (`status: ok`). Steps and the env file:
 [backend/app/meeting/README.md](../backend/app/meeting/README.md).
 
 干净克隆后，在仓库根目录运行 `scripts/meeting-dev.sh`。它安装后端依赖，
-并在 `127.0.0.1:5001` 提供验收页。Ctrl+C 停止。`GET /health` 是现成的
+并在 `127.0.0.1:5001` 提供快速录音卡片。Ctrl+C 停止。`GET /health` 是现成的
 健康检查（`status: ok`）。步骤和 env 文件见会议 README。
 
-The page is Simplified Chinese first. The controls still read Create run,
-Import transcript, Start live, Stop live, Approve, Reject, Write with
-token, Write without token, and Replay. `MOCK_ASR`, `MOCK_LLM`, and
-`MOCK_FEISHU` default to on, so that page and CI need no API keys. There
-is no separate generate action.
+The page is a compact Simplified Chinese card titled 快速录音. Controls are
+开始录音, 暂停, and 停止, plus an elapsed timer. 停止 uploads with
+`live/stop` and shows 已保存 or a short error. Minutes, review, and Feishu
+write stay on the API. `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to
+on, so that page and CI need no API keys. There is no separate generate
+action.
 
 ## Harness 五要素 / Five parts
 
@@ -211,20 +213,25 @@ Mock (default, no keys):
 1. From the repository root, run `scripts/meeting-dev.sh` with
    `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` unset or `1`. Stop it later
    with Ctrl+C. `GET /health` is ok when the process is up.
-2. Open `/meeting/ui`. Create run. Import the sample transcript.
-   Status becomes `awaiting_review` and Draft shows minutes and todos.
-3. Reject. Replay includes `review.rejected`. Write with token is
-   impossible because `review_token` is null. A write without a token is
-   HTTP 403.
-4. New run, import again, Approve, then “Write without token” (403,
-   still `awaiting_review`) and “Write with token” (mock receipts,
-   `succeeded`). Replay.
+2. Open `/meeting/ui`. The card shows 快速录音 and `00:00`. 开始录音
+   requests the microphone, 暂停 pauses in the browser, and 停止 posts
+   the recording. The card then shows 已保存 or a short error. It does
+   not render minutes, review, or Feishu controls.
+3. Review and Feishu are API-only from this page.
+   `scripts/meeting-mock-demo.sh` imports the sample transcript and
+   expects `awaiting_review`. Reject with
+   `POST /meeting/runs/{id}/review` (`decision: reject`). Replay includes
+   `review.rejected`. A write without a token is HTTP 403.
+4. New run, import again, approve, then write without a token (403,
+   still `awaiting_review`) and write with the token (mock receipts,
+   `succeeded`). Replay. The card does not expose these actions.
 
-Microphone on the mock page: Start live / Stop live uses `getUserMedia`
-and `MediaRecorder`, then posts `filename` and `content_base64` to
-`live/stop`. CI may `POST live/stop` with an empty body; with
-`MOCK_ASR=1` the service uses `mock-live:{id}` and does not invent a
-transcript from silence. The page itself does not send an empty body.
+Microphone on the card: 开始录音 uses `getUserMedia` and `MediaRecorder`,
+then `POST .../live/start`. 暂停 calls `MediaRecorder.pause` and does not
+hit the API. 停止 posts `filename` and `content_base64` to `live/stop`.
+CI may `POST live/stop` with an empty body; with `MOCK_ASR=1` the service
+uses `mock-live:{id}` and does not invent a transcript from silence. The
+card itself does not send an empty body.
 
 Live vendors (only when you mean to leave the fixtures). Run
 `scripts/meeting-dev.sh --check` first. It names each missing key and
@@ -279,9 +286,9 @@ import joins at drafting. Review and Feishu do not branch on entry.
 | Entry | Route | Acceptance UI | After ingest |
 | --- | --- | --- | --- |
 | Import audio | `POST /meeting/runs/{id}/import/audio` with JSON `filename` and `content_base64` | No file picker. API only. | `input.kind=audio`. States `ingesting` → `transcribing` → `drafting` → `awaiting_review`. Event `tool.transcribe`. |
-| Import transcript | `POST /meeting/runs/{id}/import/transcript` with JSON `text` | Transcript textarea, “Import transcript”. | `input.kind=transcript`. States `ingesting` → `drafting` → `awaiting_review`. No `tool.transcribe`. |
-| Live start | `POST /meeting/runs/{id}/live/start` | “Start live”. `getUserMedia` + `MediaRecorder`. | Marker only. Status stays `created`, `live_active=true`. No ASR. |
-| Live stop | `POST /meeting/runs/{id}/live/stop` with the same JSON shape as audio import | “Stop live” posts the blob. Preferred MIME `audio/ogg;codecs=opus` (`.ogg`) or `audio/mp4` (`.m4a`); otherwise WebM. | `input.kind=live_audio`, then the same states as import audio. |
+| Import transcript | `POST /meeting/runs/{id}/import/transcript` with JSON `text` | API only. The card has no transcript field. | `input.kind=transcript`. States `ingesting` → `drafting` → `awaiting_review`. No `tool.transcribe`. |
+| Live start | `POST /meeting/runs/{id}/live/start` | 「开始录音」. `getUserMedia` + `MediaRecorder`. 「暂停」 is local only. | Marker only. Status stays `created`, `live_active=true`. No ASR. |
+| Live stop | `POST /meeting/runs/{id}/live/stop` with the same JSON shape as audio import | 「停止」 posts the blob. Preferred MIME `audio/ogg;codecs=opus` (`.ogg`) or `audio/mp4` (`.m4a`); otherwise WebM. | `input.kind=live_audio`, then the same states as import audio. |
 
 Live start is allowed only from `created` while `live_active` is false.
 Import is allowed from `created` or `failed`, and is rejected while a live
