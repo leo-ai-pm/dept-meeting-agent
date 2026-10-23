@@ -40,24 +40,38 @@ def test_meeting_routes_mount_beside_kernel_runs():
     assert imported.json()["status"] == "awaiting_review"
     page = client.get("/meeting/ui")
     assert page.status_code == 200
-    assert "Meeting run acceptance" in page.text
-    assert "会议运行验收" in page.text
-    assert "Create run" in page.text
-    assert "Import transcript" in page.text
-    assert "Start live" in page.text
-    assert "Stop live" in page.text
-    assert "Approve" in page.text
-    assert "Reject" in page.text
-    assert "Write with token" in page.text
-    assert "Write without token" in page.text
-    assert "Replay" in page.text
+    assert "快速录音" in page.text
+    assert 'aria-label="开始录音"' in page.text
+    assert 'aria-label="暂停"' in page.text
+    assert 'aria-label="停止"' in page.text
+    assert "00:00" in page.text
+    assert "待命" in page.text
     assert 'aria-pressed="false"' in page.text
     assert 'aria-live="polite"' in page.text
     assert "getUserMedia" in page.text
     assert "MediaRecorder" in page.text
+    assert "/live/start" in page.text
+    assert "/live/stop" in page.text
     assert "content_base64" in page.text
     assert "audio/ogg;codecs=opus" in page.text
     assert "live-recording.ogg" in page.text
+    for removed in (
+        "会议运行验收",
+        "Meeting run acceptance",
+        "Create run",
+        "Import transcript",
+        "Start live",
+        "Stop live",
+        "Approve",
+        "Reject",
+        "Write with token",
+        "Write without token",
+        "Replay",
+        "采集",
+        "审阅",
+        "写入飞书",
+    ):
+        assert removed not in page.text
     denied = client.post(
         f"/meeting/runs/{run_id}/export_feishu",
         json={},

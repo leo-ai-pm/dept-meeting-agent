@@ -42,7 +42,8 @@ export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
 From the repository root, `scripts/meeting-dev.sh` creates the SQLite
 directory, runs `uv sync` in `backend/`, and serves `127.0.0.1:5001`. Stop it with
-Ctrl+C. Open `http://127.0.0.1:5001/meeting/ui`. `GET /health` is the
+Ctrl+C. Open `http://127.0.0.1:5001/meeting/ui` for the 快速录音 card.
+`GET /health` is the
 existing health route. Copy `app/meeting/env.example` to the repository
 `.env` before adding keys. `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU`
 default to `1`. `MOCK_ASR=0` calls
@@ -63,7 +64,7 @@ server is not started when that check fails. See `app/meeting/README.md`.
 ```bash
 # from the repository root
 scripts/meeting-dev.sh
-# acceptance page: http://127.0.0.1:5001/meeting/ui
+# recording card: http://127.0.0.1:5001/meeting/ui
 # stop: Ctrl+C
 ```
 

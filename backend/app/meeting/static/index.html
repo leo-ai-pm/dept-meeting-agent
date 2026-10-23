@@ -3,476 +3,263 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>会议运行验收 · Meeting run acceptance</title>
+  <title>快速录音</title>
   <style>
     :root {
       color-scheme: light dark;
       --ink: CanvasText;
       --muted: GrayText;
       --line: ButtonBorder;
-      --panel: Canvas;
-      --accent: AccentColor;
-      --accent-ink: Canvas;
+      --card: Canvas;
+      --control: ButtonFace;
+      --control-ink: ButtonText;
       --focus: Highlight;
+      --record: red;
+      --record-ink: white;
+      --ok: green;
+    }
+    @supports (color: color-mix(in srgb, red, black)) {
+      :root {
+        --record: color-mix(in srgb, red 82%, black);
+        --ok: color-mix(in srgb, green 62%, black);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --record: color-mix(in srgb, red 78%, white);
+          --record-ink: black;
+          --ok: color-mix(in srgb, green 70%, white);
+        }
+      }
     }
     @supports (color: color-mix(in srgb, black, white)) {
       :root {
-        --muted: color-mix(in srgb, CanvasText 70%, Canvas);
-        --line: color-mix(in srgb, CanvasText 50%, Canvas);
-        --panel: color-mix(in srgb, CanvasText 5%, Canvas);
+        --muted: color-mix(in srgb, CanvasText 64%, Canvas);
+        --line: color-mix(in srgb, CanvasText 18%, Canvas);
+        --card: color-mix(in srgb, CanvasText 6%, Canvas);
+        --control: color-mix(in srgb, CanvasText 12%, Canvas);
       }
     }
-    @supports (color: AccentColorText) {
-      :root { --accent-ink: AccentColorText; }
-    }
 
+    html { height: 100%; }
     body {
       margin: 0;
-      padding: 24px 16px 48px;
+      min-height: 100%;
+      display: flex;
+      align-items: safe center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 24px 16px;
       background: Canvas;
       color: var(--ink);
       font: 13px/20px system-ui, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
-    @media (min-width: 720px) {
-      body { padding: 32px 24px 64px; }
-    }
     main {
       display: grid;
-      gap: 24px;
-      max-width: 960px;
-      margin: 0 auto;
+      justify-items: center;
+      gap: 12px;
+      width: min(100%, 20rem);
     }
-    main h1, main h2, main h3, main h4, main p { margin: 0; }
-    h1 { font-size: 28px; line-height: 36px; font-weight: 600; }
-    h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
-    h3 { font-size: 15px; line-height: 22px; font-weight: 600; }
-    h4 { font-size: 13px; line-height: 20px; font-weight: 600; }
-    .kicker, .step-hint, .step-flag, .todo-meta {
+    h1, p { margin: 0; }
+    .plugin {
+      display: grid;
+      gap: 16px;
+      box-sizing: border-box;
+      width: 100%;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+    }
+    .plugin-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 600;
+    }
+    .dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      background: currentColor;
+      color: var(--muted);
+    }
+    .plugin[data-state="recording"] .dot { color: var(--record); }
+    .plugin[data-state="paused"] .dot { background: transparent; }
+    .plugin[data-state="done"] .dot { color: var(--ok); }
+    .plugin[data-state="error"] .dot { color: var(--record); }
+    .timer {
+      flex: none;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .status {
+      min-height: 16px;
       color: var(--muted);
       font-size: 11px;
       line-height: 16px;
-      font-weight: 400;
     }
-    .subtitle, .hint, .lede { color: var(--muted); }
-    .page-head, .card, .choice, .field, .stack { display: grid; }
-    .page-head { gap: 8px; }
-    .card {
-      gap: 16px;
-      padding: 20px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--panel);
-    }
-    .card[data-current="true"] { border-color: var(--accent); }
-    .card-head {
+    .status[data-state="recording"] { color: var(--ink); }
+    .status[data-state="done"] { color: var(--ok); }
+    .status[data-state="error"] { color: var(--record); }
+    .controls {
       display: flex;
       flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 8px 16px;
-    }
-    .choice { gap: 12px; align-content: start; }
-    .field { gap: 8px; }
-    .stack { gap: 12px; }
-    .split {
-      display: grid;
-      gap: 20px;
-    }
-    @media (min-width: 720px) {
-      .split { grid-template-columns: 1fr 1fr; gap: 24px; }
-      .choice + .choice {
-        padding-left: 24px;
-        border-left: 1px solid var(--line);
-      }
-    }
-    .steps {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    @media (min-width: 720px) {
-      .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    }
-    .steps li {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      min-height: 44px;
-      padding: 8px 12px;
-      border: 2px solid var(--line);
-      border-radius: 12px;
-      background: Canvas;
-    }
-    .steps li[data-state="current"] { border-color: var(--accent); }
-    .steps li[data-state="done"] {
-      background: color-mix(in srgb, var(--accent) 10%, Canvas);
-    }
-    .steps li[data-state="upcoming"],
-    .steps li[data-state="blocked"] { color: var(--muted); }
-    .step-index {
-      flex: none;
-      min-width: 1.25em;
-      font-weight: 600;
-    }
-    .step-copy { display: grid; gap: 2px; }
-    .step-label { font-weight: 600; }
-    .step-flag:empty { display: none; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    button, input, textarea {
-      font: inherit;
-      color: CanvasText;
-      background: Field;
-      border: 1px solid var(--line);
-      border-radius: 12px;
+      align-items: center;
+      gap: 16px;
     }
     button {
-      min-height: 32px;
-      padding: 6px 16px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--line);
       border-radius: 999px;
-      background: ButtonFace;
-      color: ButtonText;
+      background: var(--control);
+      color: var(--control-ink);
       cursor: pointer;
-      white-space: normal;
-      text-align: center;
     }
-    button.primary {
-      background: var(--accent);
-      color: var(--accent-ink);
-      border-color: transparent;
-      font-weight: 600;
+    button svg {
+      width: 16px;
+      height: 16px;
+      display: block;
     }
-    button.ghost {
-      background: transparent;
+    button.record {
+      background: var(--record);
+      color: var(--record-ink);
       border-color: transparent;
     }
-    button:hover:not(:disabled) {
-      background: color-mix(in srgb, ButtonFace 82%, CanvasText);
+    button:hover:not(:disabled):not([aria-disabled="true"]) {
+      background: color-mix(in srgb, var(--control) 78%, CanvasText);
     }
-    button.primary:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--accent) 82%, CanvasText);
+    button.record:hover:not(:disabled):not([aria-disabled="true"]) {
+      background: color-mix(in srgb, var(--record) 86%, CanvasText);
     }
-    button.ghost:hover:not(:disabled) {
-      background: color-mix(in srgb, CanvasText 8%, Canvas);
+    button[aria-pressed="true"]:not(.record) {
+      background: CanvasText;
+      color: Canvas;
+      border-color: transparent;
     }
-    button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+    button.record[aria-pressed="true"]::after,
+    button.record[data-phase="paused"]::after {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border: 2px solid color-mix(in srgb, var(--record) 55%, transparent);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    button:focus-visible {
       outline: 2px solid var(--focus);
-      outline-offset: 2px;
+      outline-offset: 3px;
     }
     button:disabled {
-      opacity: 0.55;
+      opacity: 0.4;
       cursor: not-allowed;
     }
+    button.record[data-phase="live"],
+    button.record[data-phase="paused"] {
+      opacity: 1;
+    }
     button[aria-busy="true"] { cursor: progress; }
+    .note {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 16px;
+      text-align: center;
+    }
     @media (prefers-reduced-motion: no-preference) {
       button { transition: transform 160ms ease-out; }
-      button:active:not(:disabled) { transform: scale(0.97); }
+      button:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.97); }
+      button.record[aria-pressed="true"]::after {
+        animation: live-ring 1.4s ease-out infinite;
+      }
+    }
+    @keyframes live-ring {
+      from { opacity: 0.9; }
+      to { opacity: 0.25; }
     }
     @media (pointer: coarse) {
-      button, input[type="text"] { min-height: 44px; }
-    }
-    textarea {
-      min-height: 120px;
-      padding: 8px 12px;
-      width: 100%;
-      box-sizing: border-box;
-      resize: vertical;
-    }
-    input[type="text"] {
-      min-height: 40px;
-      padding: 0 12px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    label { font-weight: 600; }
-    pre {
-      margin: 0;
-      padding: 12px;
-      overflow: auto;
-      max-height: 240px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: Canvas;
-      font: 12px/18px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .banner, .callout {
-      padding: 12px 16px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: var(--panel);
-    }
-    .banner[data-tone="success"], .callout[data-tone="success"], .write-summary[data-tone="success"] {
-      border-color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 14%, Canvas);
-    }
-    .banner[data-tone="error"], .write-summary[data-tone="error"] {
-      border-color: CanvasText;
-      background: color-mix(in srgb, CanvasText 8%, Canvas);
-    }
-    .banner[data-tone="warning"] {
-      background: Mark;
-      color: MarkText;
-      border-color: CanvasText;
-    }
-    .status-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 24px;
-      padding: 2px 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: Canvas;
-      font-size: 12px;
-      line-height: 16px;
-    }
-    .status-chip[data-tone="success"] { border-color: var(--accent); }
-    .status-chip[data-tone="error"] { border-color: CanvasText; }
-    .status-chip[data-tone="warning"] { background: Mark; color: MarkText; }
-    .status-chip code, .run-id {
-      font: 12px/18px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-      overflow-wrap: anywhere;
-    }
-    .live-line { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-    .live-status { display: flex; gap: 8px; align-items: flex-start; }
-    .live-status::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      margin-top: 6px;
-      border-radius: 999px;
-      background: GrayText;
-      flex: none;
-    }
-    .live-status[data-state="recording"]::before,
-    .live-status[data-state="uploading"]::before,
-    .live-status[data-state="requesting"]::before,
-    .live-status[data-state="ready"]::before { background: var(--accent); }
-    .live-status[data-state="error"]::before {
-      background: CanvasText;
-      border-radius: 2px;
-    }
-    .elapsed {
-      min-width: 3.5em;
-      font: 15px/22px ui-monospace, monospace;
-      font-weight: 600;
-    }
-    .minutes, .draft-view { display: grid; gap: 12px; }
-    .minutes ol, .todos, .receipts {
-      margin: 0;
-      padding-left: 1.25em;
-    }
-    .minutes ol li + li, .todos li + li, .receipts li + li { margin-top: 8px; }
-    .todos li + li { margin-top: 12px; }
-    .todos li, .receipts li { display: grid; gap: 4px; }
-    .todo-title { font-weight: 600; }
-    .quote {
-      padding-left: 12px;
-      border-left: 2px solid var(--line);
-      color: var(--muted);
-    }
-    .events { list-style: none; margin: 0; padding: 0; }
-    .events li + li { margin-top: 8px; }
-    .events li { display: grid; gap: 2px; }
-    .event-type {
-      font: 12px/18px ui-monospace, monospace;
-      overflow-wrap: anywhere;
-    }
-    .receipts { list-style: decimal; }
-    .receipts li[data-tone="error"] { font-weight: 600; }
-    details { display: grid; gap: 8px; }
-    summary { cursor: pointer; font-weight: 600; }
-    .empty { color: var(--muted); }
-    @media (prefers-reduced-motion: no-preference) {
-      .live-status[data-state="recording"]::before {
-        animation: pulse 1.4s ease-out infinite;
-      }
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before { animation: none !important; transition: none !important; }
+      button { width: 44px; height: 44px; }
     }
     @media (forced-colors: active) {
-      .card, .steps li, pre, textarea, input, .banner, .callout, .status-chip {
-        border: 1px solid CanvasText;
-      }
-      button.primary {
-        background: Highlight;
-        color: HighlightText;
+      .plugin { border: 1px solid CanvasText; }
+      button {
         border: 1px solid ButtonText;
+        background: ButtonFace;
+        color: ButtonText;
+        opacity: 1;
       }
-      .live-status::before { background: CanvasText; forced-color-adjust: none; }
-      .steps li[data-state="current"], .card[data-current="true"] {
-        outline: 2px solid Highlight;
+      button.record {
+        background: ButtonText;
+        color: ButtonFace;
+      }
+      button:disabled {
+        color: GrayText;
+        border-color: GrayText;
+      }
+      button.record[aria-pressed="true"]::after,
+      button.record[data-phase="paused"]::after {
+        border-color: Highlight;
+      }
+      .dot, .status[data-state="done"], .status[data-state="error"] {
+        color: CanvasText;
       }
     }
   </style>
 </head>
 <body>
-  <main id="app">
-    <header class="page-head">
-      <p class="kicker">本地验收</p>
-      <h1>会议运行验收</h1>
-      <p class="subtitle">Meeting run acceptance</p>
-      <p class="lede">创建运行，导入文字稿或现场录音，审阅纪要，再写入飞书。写入必须带这次批准签发的 review token。</p>
-    </header>
-
-    <ol class="steps" aria-label="验收步骤">
-      <li data-step="capture" data-state="current" aria-current="step">
-        <span class="step-index" aria-hidden="true">1</span>
-        <span class="step-copy">
-          <span class="step-label">采集</span>
-          <span class="step-hint">导入或录音</span>
-          <span class="step-flag">当前</span>
-        </span>
-      </li>
-      <li data-step="minutes" data-state="upcoming">
-        <span class="step-index" aria-hidden="true">2</span>
-        <span class="step-copy">
-          <span class="step-label">纪要</span>
-          <span class="step-hint">生成草稿</span>
-          <span class="step-flag"></span>
-        </span>
-      </li>
-      <li data-step="review" data-state="upcoming">
-        <span class="step-index" aria-hidden="true">3</span>
-        <span class="step-copy">
-          <span class="step-label">审阅</span>
-          <span class="step-hint">批准或拒绝</span>
-          <span class="step-flag"></span>
-        </span>
-      </li>
-      <li data-step="write" data-state="upcoming">
-        <span class="step-index" aria-hidden="true">4</span>
-        <span class="step-copy">
-          <span class="step-label">写入飞书</span>
-          <span class="step-hint">带 token</span>
-          <span class="step-flag"></span>
-        </span>
-      </li>
-    </ol>
-
-    <p id="banner" class="banner" role="status" data-tone="info">第 1 步：创建一次运行。</p>
-
-    <section class="card" id="capture-section" data-step-panel="capture" data-current="true" aria-labelledby="import-heading">
-      <div class="card-head">
-        <h2 id="import-heading">采集</h2>
-        <p class="status-chip" data-tone="neutral">
-          <span id="status-label">未开始</span>
-          <code id="status">none</code>
-        </p>
+  <main>
+    <article class="plugin" id="plugin" data-state="idle" aria-labelledby="plugin-title">
+      <div class="plugin-head">
+        <h1 id="plugin-title">
+          <span class="dot" aria-hidden="true"></span>
+          快速录音
+        </h1>
+        <p class="timer"><time id="timer" datetime="PT0M0S" aria-hidden="true">00:00</time></p>
       </div>
-      <p id="run-id" class="run-id">尚未创建运行。</p>
-      <div class="row">
-        <button type="button" id="create" class="primary">创建运行 Create run</button>
-        <button type="button" id="refresh" class="ghost" disabled>刷新 Refresh</button>
+      <p id="status" class="status" role="status" aria-live="polite" data-state="idle">待命</p>
+      <div class="controls" role="group" aria-label="录音控制">
+        <button type="button" id="record" class="record" data-phase="idle" aria-pressed="false" aria-disabled="false" aria-label="开始录音" aria-describedby="status">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="4.5" fill="currentColor" />
+          </svg>
+        </button>
+        <button type="button" id="pause" aria-pressed="false" aria-label="暂停" aria-describedby="status" disabled>
+          <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="4" y="3" width="2.5" height="10" rx="0.5" fill="currentColor" />
+            <rect x="9.5" y="3" width="2.5" height="10" rx="0.5" fill="currentColor" />
+          </svg>
+          <svg class="icon-resume" viewBox="0 0 16 16" aria-hidden="true" hidden>
+            <path d="M6 3.8v8.4L12.2 8 6 3.8z" fill="currentColor" />
+          </svg>
+        </button>
+        <button type="button" id="stop" aria-label="停止" aria-describedby="status" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="4.5" y="4.5" width="7" height="7" rx="1" fill="currentColor" />
+          </svg>
+        </button>
       </div>
-      <p id="capture-hint" class="hint">请先创建运行。然后导入文字稿，或开始现场录音。</p>
-      <div class="split">
-        <div class="choice">
-          <h3>导入文字稿 Import transcript</h3>
-          <div class="field">
-            <label for="transcript">文字稿 Transcript</label>
-            <textarea id="transcript" spellcheck="false">会议：增长组周会
-李敏：落地页转化实验在周五前复盘。新客优惠只对首单生效。
-张三：我来整理实验数据，下周三前给结论。</textarea>
-          </div>
-          <div class="row">
-            <button type="button" id="import-transcript" disabled>导入文字稿 Import transcript</button>
-          </div>
-        </div>
-        <div class="choice">
-          <h3>现场录音</h3>
-          <div class="live-line">
-            <p id="live-status" class="live-status" data-state="idle" aria-live="polite">未在录音。 Not recording.</p>
-            <span id="live-elapsed" class="elapsed" hidden aria-hidden="true"></span>
-          </div>
-          <div class="row">
-            <button type="button" id="live-start" aria-pressed="false" aria-describedby="live-status" disabled>开始录音 Start live</button>
-            <button type="button" id="live-stop" aria-describedby="live-status" disabled>停止录音 Stop live</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="card" id="draft-section" data-step-panel="draft" data-current="false" aria-labelledby="draft-heading">
-      <div class="card-head">
-        <h2 id="draft-heading">纪要与审阅 Draft</h2>
-      </div>
-      <p id="review-hint" class="hint">导入或录音完成、状态成为 awaiting_review 后才能审阅。</p>
-      <div id="draft" class="draft-view">
-        <p class="empty">还没有草稿。 No draft yet.</p>
-      </div>
-      <div class="field">
-        <label for="todo-title">第一条飞书任务标题 First Feishu task title</label>
-        <input id="todo-title" type="text" value="" autocomplete="off" />
-        <p class="hint">只改第一条待办的标题，其余纪要保持不变。然后点「修改并批准」。</p>
-      </div>
-      <div class="row">
-        <button type="button" id="approve" disabled>批准 Approve</button>
-        <button type="button" id="edit-approve" disabled>修改并批准 Edit and approve</button>
-        <button type="button" id="reject" class="ghost" disabled>拒绝 Reject</button>
-      </div>
-      <details id="token-details" hidden>
-        <summary>查看 review token</summary>
-        <pre id="token-value"></pre>
-      </details>
-    </section>
-
-    <section class="card" id="write-section" data-step-panel="write" data-current="false" aria-labelledby="write-heading">
-      <div class="card-head">
-        <h2 id="write-heading">飞书任务写入 Feishu task write</h2>
-      </div>
-      <p id="next-action" class="callout" hidden></p>
-      <p class="hint">「不带 token 写入」用来确认门禁。它不会创建飞书任务。成功之前，同一个 token 可以重试；已经写成功的待办不会再建一次。全部成功后再提交会返回 consumed。</p>
-      <div class="row">
-        <button type="button" id="write-with" disabled>带 token 写入 Write with token</button>
-        <button type="button" id="write-without" disabled>不带 token 写入 Write without token</button>
-      </div>
-      <p id="write-summary" class="write-summary" data-tone="info">还没有尝试写入。 No write attempted.</p>
-      <ol id="write-receipts" class="receipts" hidden></ol>
-      <pre id="write-result" hidden>还没有尝试写入。 No write attempted.</pre>
-    </section>
-
-    <section class="card" aria-labelledby="replay-heading">
-      <div class="card-head">
-        <h2 id="replay-heading">回放 Replay</h2>
-      </div>
-      <div class="row">
-        <button type="button" id="replay" class="ghost" disabled>回放 Replay</button>
-      </div>
-      <div id="replay-log">
-        <p class="empty">还没有加载事件。 No events loaded.</p>
-      </div>
-    </section>
+    </article>
+    <p class="note">只负责录音。纪要与飞书仍通过接口处理。</p>
   </main>
   <script>
     const base = window.location.pathname.replace(/\/ui\/?$/, "");
-    const state = {
-      id: null,
-      status: "none",
-      approved: false,
-      token: null,
-      draft: null,
-      runError: "",
-      recorder: null,
-      stream: null,
-      chunks: [],
-      mime: "",
-      pendingBlob: null,
-      pendingName: "",
-      busy: false,
-      elapsedTimer: 0,
-      focusAfter: null,
-      scrollAfter: null,
-    };
     const liveMimeCandidates = [
       "audio/ogg;codecs=opus",
       "audio/ogg",
@@ -480,104 +267,48 @@
       "audio/webm;codecs=opus",
       "audio/webm",
     ];
-    const STATUS_LABEL = {
-      none: "未开始",
-      created: "已创建",
-      ingesting: "正在接收",
-      transcribing: "正在转写",
-      drafting: "正在生成纪要",
-      awaiting_review: "待审阅",
-      writing_feishu: "正在写入",
-      succeeded: "已完成",
-      failed: "失败",
-      rejected: "已拒绝",
+    const state = {
+      id: null,
+      recorder: null,
+      stream: null,
+      chunks: [],
+      mime: "",
+      paused: false,
+      pendingBlob: null,
+      pendingName: "",
+      busy: false,
+      elapsedMs: 0,
+      segmentStart: 0,
+      elapsedTimer: 0,
+      mode: "idle",
     };
-    const REASON_COPY = {
-      missing_token: "未带 review token，飞书没有被调用（missing_token）。状态应仍是 awaiting_review。",
-      consumed: "这个 review token 已经用过（consumed）。飞书没有再次调用，也不会再建一组任务。",
-      expired: "review token 已过期（expired）。请重新批准。",
-      hash_mismatch: "token 与当前纪要不匹配（hash_mismatch）。请重新批准。",
-      invalid_token: "review token 无效（invalid_token）。",
-      run_mismatch: "token 不属于这次运行（run_mismatch）。",
-      rejected: "这次运行已拒绝（rejected），不能写入飞书。",
-      invalid_state: "当前状态不能写入飞书（invalid_state）。",
-    };
-    const ERROR_COPY = {
-      empty_transcript: "文字稿不能为空。",
-      feishu_not_configured: "飞书还没配好，review token 没有被消耗。",
-      empty_audio: "没有收到音频。MOCK_ASR=0 时不能空着停止录音。",
-      conflict: "当前状态不允许这一步。",
-    };
-    const STEP_ORDER = ["capture", "minutes", "review", "write"];
 
-    const appEl = document.getElementById("app");
-    const bannerEl = document.getElementById("banner");
+    const pluginEl = document.getElementById("plugin");
     const statusEl = document.getElementById("status");
-    const statusLabelEl = document.getElementById("status-label");
-    const statusChipEl = statusEl.closest(".status-chip");
-    const runIdEl = document.getElementById("run-id");
-    const draftEl = document.getElementById("draft");
-    const writeSummaryEl = document.getElementById("write-summary");
-    const writeReceiptsEl = document.getElementById("write-receipts");
-    const writeResultEl = document.getElementById("write-result");
-    const replayEl = document.getElementById("replay-log");
-    const liveStatusEl = document.getElementById("live-status");
-    const liveElapsedEl = document.getElementById("live-elapsed");
-    const liveStartEl = document.getElementById("live-start");
-    const liveStopEl = document.getElementById("live-stop");
-    const importTranscriptEl = document.getElementById("import-transcript");
-    const transcriptEl = document.getElementById("transcript");
-    const createEl = document.getElementById("create");
-    const refreshEl = document.getElementById("refresh");
-    const approveEl = document.getElementById("approve");
-    const rejectEl = document.getElementById("reject");
-    const editApproveEl = document.getElementById("edit-approve");
-    const todoTitleEl = document.getElementById("todo-title");
-    const writeWithEl = document.getElementById("write-with");
-    const writeWithoutEl = document.getElementById("write-without");
-    const replayButtonEl = document.getElementById("replay");
-    const nextActionEl = document.getElementById("next-action");
-    const captureHintEl = document.getElementById("capture-hint");
-    const reviewHintEl = document.getElementById("review-hint");
-    const captureSectionEl = document.getElementById("capture-section");
-    const tokenDetailsEl = document.getElementById("token-details");
-    const tokenValueEl = document.getElementById("token-value");
-    const actionButtons = [
-      createEl, refreshEl, importTranscriptEl, liveStartEl, liveStopEl,
-      approveEl, editApproveEl, rejectEl, writeWithEl, writeWithoutEl, replayButtonEl,
-    ];
+    const timerEl = document.getElementById("timer");
+    const recordEl = document.getElementById("record");
+    const pauseEl = document.getElementById("pause");
+    const stopEl = document.getElementById("stop");
+    const pauseIcon = pauseEl.querySelector(".icon-pause");
+    const resumeIcon = pauseEl.querySelector(".icon-resume");
 
     function unwrap(body) {
-      if (!body || typeof body !== "object") {
-        return { message: body ? String(body) : "", reason: "", error: "" };
-      }
-      if (typeof body.detail === "string") {
-        return { message: body.detail, reason: "", error: "" };
-      }
-      if (Array.isArray(body.detail)) {
-        const message = body.detail
-          .map((item) => (item && item.msg) || "")
-          .filter(Boolean)
-          .join("；");
-        return { message: message, reason: "", error: "validation" };
-      }
-      const detail = body.detail && typeof body.detail === "object" ? body.detail : body;
+      if (!body || typeof body !== "object") return { error: "", message: "" };
+      const detail = body.detail && typeof body.detail === "object" && !Array.isArray(body.detail)
+        ? body.detail
+        : body;
       return {
-        message: typeof detail.message === "string" ? detail.message : "",
-        reason: typeof detail.reason === "string" ? detail.reason : "",
         error: typeof detail.error === "string" ? detail.error : "",
+        message: typeof detail.message === "string" ? detail.message : "",
       };
     }
 
-    function problemText(result) {
+    function shortProblem(result) {
       const info = unwrap(result.body);
-      if (info.reason && REASON_COPY[info.reason]) return REASON_COPY[info.reason];
-      if (info.error && ERROR_COPY[info.error]) {
-        return ERROR_COPY[info.error] + (info.message ? " " + info.message : "");
-      }
-      if (info.message) return info.message;
-      if (!result.status) return "网络请求失败。 Network request failed";
-      return "请求失败（HTTP " + result.status + "）。";
+      if (info.error === "empty_audio") return "没有收到音频";
+      if (info.error === "conflict") return "当前不能开始录音";
+      if (!result.status) return "网络请求失败";
+      return "请求失败";
     }
 
     async function api(path, options) {
@@ -589,397 +320,85 @@
         const body = await response.json().catch(() => ({}));
         return { ok: response.ok, status: response.status, body };
       } catch (err) {
-        const message = err && err.message ? err.message : "网络请求失败。 Network request failed";
-        return { ok: false, status: 0, body: { detail: { message: message } } };
+        return { ok: false, status: 0, body: { detail: { message: "网络请求失败" } } };
       }
     }
 
-    function setBanner(text, tone) {
-      bannerEl.textContent = text;
-      bannerEl.dataset.tone = tone || "info";
+    function setStatus(text, mode) {
+      state.mode = mode || "idle";
+      const shown = state.mode === "uploading" || state.mode === "requesting" ? "idle" : state.mode;
+      statusEl.textContent = text;
+      statusEl.dataset.state = state.mode === "error" ? "error" : shown;
+      pluginEl.dataset.state = shown;
     }
 
-    function setLiveStatus(text, mode) {
-      liveStatusEl.textContent = text;
-      if (mode) liveStatusEl.dataset.state = mode;
+    function paintElapsed() {
+      const extra = state.segmentStart ? Date.now() - state.segmentStart : 0;
+      const total = Math.max(0, Math.floor((state.elapsedMs + extra) / 1000));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const seconds = total % 60;
+      const mm = String(minutes).padStart(2, "0");
+      const ss = String(seconds).padStart(2, "0");
+      timerEl.textContent = hours > 0 ? hours + ":" + mm + ":" + ss : mm + ":" + ss;
+      timerEl.dateTime = "PT" + (hours ? hours + "H" : "") + minutes + "M" + seconds + "S";
     }
 
-    function statusLabel() {
-      if (state.status === "awaiting_review" && state.approved) return "已批准";
-      return STATUS_LABEL[state.status] || state.status || "未开始";
+    function resetElapsed() {
+      state.elapsedMs = 0;
+      state.segmentStart = 0;
+      if (state.elapsedTimer) window.clearInterval(state.elapsedTimer);
+      state.elapsedTimer = 0;
+      paintElapsed();
     }
 
-    function statusTone() {
-      if (state.status === "succeeded" || (state.status === "awaiting_review" && state.approved)) return "success";
-      if (state.status === "failed") return "error";
-      if (state.status === "rejected") return "warning";
-      if (["awaiting_review", "writing_feishu", "transcribing", "drafting", "ingesting"].indexOf(state.status) >= 0) {
-        return "info";
-      }
-      return "neutral";
+    function startElapsed() {
+      state.segmentStart = Date.now();
+      paintElapsed();
+      if (state.elapsedTimer) window.clearInterval(state.elapsedTimer);
+      state.elapsedTimer = window.setInterval(paintElapsed, 250);
     }
 
-    function applyStatus(status, approved) {
-      if (status) state.status = status;
-      if (typeof approved === "boolean") state.approved = approved;
-      statusEl.textContent = state.status || "none";
-      statusLabelEl.textContent = statusLabel();
-      statusChipEl.dataset.tone = statusTone();
+    function pauseElapsed() {
+      if (state.segmentStart) {
+        state.elapsedMs += Date.now() - state.segmentStart;
+        state.segmentStart = 0;
+      }
+      if (state.elapsedTimer) window.clearInterval(state.elapsedTimer);
+      state.elapsedTimer = 0;
+      paintElapsed();
     }
 
-    function currentStep() {
-      if (state.recorder || state.pendingBlob) return "capture";
-      if (!state.id || state.status === "none" || state.status === "created") return "capture";
-      if (state.status === "ingesting" || state.status === "transcribing" || state.status === "drafting") return "minutes";
-      if (state.status === "writing_feishu" || state.status === "succeeded") return "write";
-      if (state.status === "rejected") return "review";
-      if (state.status === "awaiting_review") {
-        return state.approved && state.token ? "write" : "review";
-      }
-      if (state.status === "failed") {
-        if (state.approved && state.token) return "write";
-        return state.draft ? "minutes" : "capture";
-      }
-      return "capture";
-    }
-
-    function guidance() {
-      const retryHint = "同一个 review token 仍然有效。再点「带 token 写入」只会补还没有成功的待办，已有任务不会再建。重新导入会作废这个 token。";
-      if (!state.id) {
-        return { banner: "第 1 步：创建一次运行。", tone: "info", next: "", showNext: false };
-      }
-      if (state.recorder) {
-        return { banner: "正在录音。会议结束请点「停止录音」。", tone: "info", next: "", showNext: false };
-      }
-      if (state.pendingBlob) {
-        return {
-          banner: "录音还在本地。再点「停止录音」会重发同一段录音。",
-          tone: "warning",
-          next: "",
-          showNext: false,
-        };
-      }
-      if (state.status === "created") {
-        return { banner: "运行已创建。导入文字稿，或开始现场录音。", tone: "info", next: "", showNext: false };
-      }
-      if (state.status === "ingesting" || state.status === "transcribing" || state.status === "drafting" || state.status === "writing_feishu") {
-        return { banner: "正在处理这一步…", tone: "info", next: "", showNext: false };
-      }
-      if (state.status === "awaiting_review" && state.approved && state.token) {
-        return {
-          banner: "已批准。下一步：带 token 写入飞书。不带 token 的写入会被拒绝，且不会调用飞书。",
-          tone: "success",
-          next: "下一步：带 token 写入。可先点「不带 token 写入」确认门禁返回 403。",
-          showNext: true,
-        };
-      }
-      if (state.status === "awaiting_review") {
-        return {
-          banner: "纪要已就绪。请批准、修改后批准，或拒绝。拒绝不会写入飞书。",
-          tone: "info",
-          next: "",
-          showNext: false,
-        };
-      }
-      if (state.status === "succeeded") {
-        return {
-          banner: "飞书任务已写入。review token 已消耗。再次提交会返回 consumed，不会再建一组任务。",
-          tone: "success",
-          next: "写入已完成。再次点「带 token 写入」会返回 consumed，飞书不会被再次调用。",
-          showNext: true,
-        };
-      }
-      if (state.status === "failed" && state.approved && state.token) {
-        const detail = state.runError ? "写入未完成：" + state.runError + "。" : "写入未完成。";
-        return {
-          banner: detail + retryHint,
-          tone: "error",
-          next: "用同一个 token 重试。已经写成功的待办不会再建。",
-          showNext: true,
-        };
-      }
-      if (state.status === "failed") {
-        const detail = state.runError ? "这一步失败：" + state.runError + "。" : "这一步失败。";
-        return { banner: detail + "可以修改文字稿后重新导入。", tone: "error", next: "", showNext: false };
-      }
-      if (state.status === "rejected") {
-        return {
-          banner: "已拒绝。没有 review token，也不会写入飞书。要重试请新建运行。",
-          tone: "warning",
-          next: "",
-          showNext: false,
-        };
-      }
-      return { banner: "状态 " + state.status, tone: "info", next: "", showNext: false };
-    }
-
-    function paintSteps() {
-      const current = currentStep();
-      const currentIndex = STEP_ORDER.indexOf(current);
-      STEP_ORDER.forEach((step) => {
-        const el = document.querySelector('.steps [data-step="' + step + '"]');
-        const index = STEP_ORDER.indexOf(step);
-        let name = "upcoming";
-        if (state.status === "succeeded") name = "done";
-        else if (state.status === "rejected" && step === "write") name = "blocked";
-        else if (step === current) name = "current";
-        else if (index < currentIndex) name = "done";
-        el.dataset.state = name;
-        if (name === "current") el.setAttribute("aria-current", "step");
-        else el.removeAttribute("aria-current");
-        const flag = el.querySelector(".step-flag");
-        flag.textContent = name === "done" ? "完成" : name === "current" ? "当前" : name === "blocked" ? "不可用" : "";
-      });
-      let panel = "capture";
-      if (current === "minutes" || current === "review") panel = "draft";
-      else if (current === "write") panel = "write";
-      if (state.status === "succeeded") panel = "";
-      document.querySelectorAll("[data-step-panel]").forEach((section) => {
-        section.dataset.current = section.getAttribute("data-step-panel") === panel ? "true" : "false";
-      });
-    }
-
-    function primaryId() {
-      if (state.recorder || state.pendingBlob) return "live-stop";
-      if (!state.id) return "create";
-      if (state.status === "created") return "import-transcript";
-      if (state.status === "awaiting_review" && !(state.approved && state.token)) return "approve";
-      if (state.approved && state.token && state.status !== "succeeded" && state.status !== "rejected") {
-        return "write-with";
-      }
-      return "create";
-    }
-
-    function syncButtons() {
-      const recording = Boolean(state.recorder);
+    function syncControls() {
+      const live = Boolean(state.recorder) && !state.paused;
+      const paused = Boolean(state.recorder) && state.paused;
       const retry = Boolean(state.pendingBlob);
       const busy = state.busy;
-      const hasRun = Boolean(state.id);
-      const canImport = hasRun && !recording && !retry && !busy && (state.status === "created" || state.status === "failed");
-      const canLiveStart = hasRun && !recording && !retry && !busy && state.status === "created";
-      const canReview = hasRun && Boolean(state.draft) && state.status === "awaiting_review" && !busy && !recording && !retry;
-      liveStartEl.disabled = !canLiveStart;
-      liveStopEl.disabled = busy || (!recording && !retry);
-      importTranscriptEl.disabled = !canImport;
-      transcriptEl.disabled = recording;
-      liveStartEl.setAttribute("aria-pressed", recording ? "true" : "false");
-      createEl.disabled = busy;
-      refreshEl.disabled = !hasRun || busy;
-      approveEl.disabled = !canReview;
-      rejectEl.disabled = !canReview;
-      editApproveEl.disabled = !canReview;
-      writeWithEl.disabled = !hasRun || !state.token || busy || recording;
-      writeWithoutEl.disabled = !hasRun || busy || recording;
-      replayButtonEl.disabled = !hasRun || busy;
-      const busyButton = actionButtons.find((button) => button.getAttribute("aria-busy") === "true");
-      const primary = busyButton ? busyButton.id : primaryId();
-      actionButtons.forEach((button) => {
-        button.classList.toggle("primary", button.id === primary);
-      });
-      captureSectionEl.dataset.recording = recording ? "true" : "false";
-    }
-
-    function paintHints() {
-      if (!state.id) {
-        captureHintEl.textContent = "请先创建运行。然后导入文字稿，或开始现场录音。";
-      } else if (state.recorder) {
-        captureHintEl.textContent = "麦克风已打开。点停止录音后会上传并生成纪要。";
-      } else if (state.pendingBlob) {
-        captureHintEl.textContent = "上传未成功。再点停止录音会重发这一段，不会重新采集。";
-      } else if (state.status === "created") {
-        captureHintEl.textContent = "二选一：导入下方文字稿，或开始现场录音。";
-      } else if (state.status === "failed" && state.approved && state.token) {
-        captureHintEl.textContent = "重新导入会作废尚未用完的 review token，并需要重新批准。";
-      } else if (state.status === "failed") {
-        captureHintEl.textContent = "可以修改文字稿后重新导入。现场录音需要新建运行。";
+      recordEl.disabled = busy || paused || retry;
+      recordEl.dataset.phase = live ? "live" : paused ? "paused" : "idle";
+      if (live) {
+        recordEl.disabled = false;
+        recordEl.setAttribute("aria-disabled", "true");
+        recordEl.setAttribute("aria-pressed", "true");
+        recordEl.setAttribute("aria-label", "录音中");
       } else {
-        captureHintEl.textContent = "这次运行已经采集过。要换一段内容，请新建运行。";
+        recordEl.setAttribute("aria-disabled", "false");
+        recordEl.setAttribute("aria-pressed", "false");
+        recordEl.setAttribute("aria-label", "开始录音");
       }
-      if (state.status === "awaiting_review" && state.draft && state.approved && state.token) {
-        reviewHintEl.textContent = "已批准。还可以修改第一条待办标题后再次批准，旧 token 会失效。";
-      } else if (state.status === "awaiting_review" && state.draft) {
-        reviewHintEl.textContent = "批准后才会签发 review token。拒绝不会写入飞书。";
-      } else if (state.status === "rejected") {
-        reviewHintEl.textContent = "已拒绝。审阅按钮已停用。";
-      } else {
-        reviewHintEl.textContent = "导入或录音完成、状态成为 awaiting_review 后才能审阅。";
-      }
+      pauseEl.disabled = busy || (!live && !paused);
+      pauseEl.setAttribute("aria-pressed", paused ? "true" : "false");
+      pauseEl.setAttribute("aria-label", paused ? "继续" : "暂停");
+      pauseIcon.hidden = paused;
+      resumeIcon.hidden = !paused;
+      stopEl.disabled = busy || (!live && !paused && !retry);
+      stopEl.setAttribute("aria-busy", busy && (live || paused || retry) ? "true" : "false");
+      pluginEl.setAttribute("aria-busy", busy ? "true" : "false");
     }
 
-    function paintCallout(guide) {
-      nextActionEl.textContent = guide.next || "";
-      nextActionEl.hidden = !guide.showNext;
-      nextActionEl.dataset.tone = guide.tone || "info";
-      if (guide.showNext) writeWithEl.setAttribute("aria-describedby", "next-action");
-      else writeWithEl.removeAttribute("aria-describedby");
-    }
-
-    function paintToken() {
-      if (!state.token) {
-        tokenDetailsEl.hidden = true;
-        tokenValueEl.textContent = "";
-        return;
-      }
-      tokenDetailsEl.hidden = false;
-      tokenValueEl.textContent = state.token;
-    }
-
-    function syncChrome(options) {
-      const guide = guidance();
-      paintSteps();
-      syncButtons();
-      paintHints();
-      paintCallout(guide);
-      paintToken();
-      appEl.setAttribute("aria-busy", state.busy ? "true" : "false");
-      if (!options || !options.keepBanner) setBanner(guide.banner, guide.tone);
-    }
-
-    function paintRun(run) {
-      state.id = run.id || state.id;
-      if (run.approved === false) state.token = null;
-      applyStatus(run.status || "none", typeof run.approved === "boolean" ? run.approved : state.approved);
-      state.runError = run.error || "";
-      runIdEl.textContent = state.id ? "运行 Run " + state.id : "尚未创建运行。";
-      syncChrome({ keepBanner: true });
-    }
-
-    function addText(parent, tag, className, text) {
-      const el = document.createElement(tag);
-      if (className) el.className = className;
-      el.textContent = text;
-      parent.append(el);
-      return el;
-    }
-
-    function renderDraft(body) {
-      draftEl.replaceChildren();
-      if (!body || !body.minutes) {
-        addText(draftEl, "p", "empty", "还没有草稿。 No draft yet.");
-        return;
-      }
-      const minutes = body.minutes;
-      const article = document.createElement("article");
-      article.className = "minutes";
-      addText(article, "h3", "", minutes.title || "未命名纪要");
-      if (minutes.summary) addText(article, "p", "", minutes.summary);
-      const decisions = Array.isArray(minutes.decisions) ? minutes.decisions : [];
-      if (decisions.length) {
-        addText(article, "h4", "", "决议");
-        const list = document.createElement("ol");
-        decisions.forEach((item) => addText(list, "li", "", String(item)));
-        article.append(list);
-      }
-      if (minutes.body) addText(article, "p", "", minutes.body);
-      const todos = Array.isArray(body.todos) ? body.todos : [];
-      addText(article, "h4", "", "待办 " + todos.length);
-      const todoList = document.createElement("ol");
-      todoList.className = "todos";
-      todos.forEach((todo) => {
-        const item = document.createElement("li");
-        addText(item, "p", "todo-title", todo.title || "");
-        addText(
-          item,
-          "p",
-          "todo-meta",
-          "负责人 " + (todo.assignee || "待确认") + " · 截止 " + (todo.due_date || "待确认")
-        );
-        if (todo.description) addText(item, "p", "", todo.description);
-        if (todo.source_quote) addText(item, "p", "quote", todo.source_quote);
-        todoList.append(item);
-      });
-      article.append(todoList);
-      const details = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = "原始草稿 JSON";
-      const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(body, null, 2);
-      details.append(summary, pre);
-      draftEl.append(article, details);
-    }
-
-    function fillReceipts(receipts) {
-      writeReceiptsEl.replaceChildren();
-      if (!receipts || !receipts.length) {
-        writeReceiptsEl.hidden = true;
-        return;
-      }
-      writeReceiptsEl.hidden = false;
-      receipts.forEach((item) => {
-        const li = document.createElement("li");
-        const ok = Boolean(item && item.ok);
-        li.dataset.tone = ok ? "success" : "error";
-        const parts = [ok ? "已写入" : "未写入"];
-        if (item && item.feishu_task_id) parts.push(String(item.feishu_task_id));
-        if (item && item.error) parts.push(String(item.error));
-        li.textContent = parts.join(" ");
-        writeReceiptsEl.append(li);
-      });
-    }
-
-    function receiptSentence(receipts) {
-      if (!receipts || !receipts.length) return "";
-      const ok = receipts.filter((item) => item && item.ok).length;
-      if (ok === receipts.length) return "全部 " + ok + " 条待办都有飞书回执。";
-      if (ok === 0) return receipts.length + " 条待办都还没有成功回执。";
-      return receipts.length + " 条里 " + ok + " 条已有任务，其余会在重试时补写。";
-    }
-
-    function renderWrite(summary, tone, receipts, payload, keepReceipts) {
-      writeSummaryEl.textContent = summary;
-      writeSummaryEl.dataset.tone = tone || "info";
-      if (!keepReceipts) fillReceipts(receipts || []);
-      if (payload) {
-        writeResultEl.hidden = false;
-        writeResultEl.textContent = JSON.stringify(payload, null, 2);
-      } else {
-        writeResultEl.hidden = true;
-        writeResultEl.textContent = "";
-      }
-    }
-
-    function renderReplay(body) {
-      replayEl.replaceChildren();
-      if (!body || !Array.isArray(body.events)) {
-        addText(replayEl, "p", "empty", typeof body === "string" ? body : "还没有加载事件。 No events loaded.");
-        if (body && typeof body === "object") {
-          const pre = document.createElement("pre");
-          pre.textContent = JSON.stringify(body, null, 2);
-          replayEl.append(pre);
-        }
-        return;
-      }
-      const list = document.createElement("ol");
-      list.className = "events";
-      body.events.forEach((event) => {
-        const item = document.createElement("li");
-        addText(item, "span", "event-type", (event.seq != null ? event.seq + " · " : "") + (event.type || ""));
-        addText(item, "span", "", event.summary || "");
-        list.append(item);
-      });
-      const details = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = "原始回放 JSON";
-      const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(body, null, 2);
-      details.append(summary, pre);
-      replayEl.append(list, details);
-    }
-
-    async function loadDraft() {
-      if (!state.id) return;
-      const result = await api("/runs/" + state.id + "/draft");
-      if (!result.ok) {
-        if (result.status === 404) {
-          state.draft = null;
-          renderDraft(null);
-        }
-        return;
-      }
-      state.draft = result.body;
-      renderDraft(result.body);
-      const first = (result.body.todos || [])[0];
-      todoTitleEl.value = first && first.title ? first.title : "";
+    function stopTracks(stream) {
+      if (!stream) return;
+      for (const track of stream.getTracks()) track.stop();
     }
 
     function releaseStream() {
@@ -987,42 +406,17 @@
       state.stream = null;
       state.recorder = null;
       state.chunks = [];
-      if (!stream) return;
-      for (const track of stream.getTracks()) track.stop();
-    }
-
-    function stopElapsed() {
-      if (state.elapsedTimer) window.clearInterval(state.elapsedTimer);
-      state.elapsedTimer = 0;
-      liveElapsedEl.hidden = true;
-      liveElapsedEl.textContent = "";
-    }
-
-    function startElapsed() {
-      stopElapsed();
-      const startedAt = Date.now();
-      liveElapsedEl.hidden = false;
-      const tick = () => {
-        const total = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-        const mm = String(Math.floor(total / 60)).padStart(2, "0");
-        const ss = String(total % 60).padStart(2, "0");
-        liveElapsedEl.textContent = mm + ":" + ss;
-      };
-      tick();
-      state.elapsedTimer = window.setInterval(tick, 1000);
+      state.paused = false;
+      stopTracks(stream);
     }
 
     function discardCapture() {
       const recorder = state.recorder;
-      state.pendingBlob = null;
-      state.pendingName = "";
       if (recorder && recorder.state !== "inactive") {
         try { recorder.stop(); } catch (err) { /* already stopped */ }
       }
       releaseStream();
-      stopElapsed();
-      setLiveStatus("未在录音。 Not recording.", "idle");
-      syncChrome({ keepBanner: true });
+      pauseElapsed();
     }
 
     function preferredLiveMime() {
@@ -1039,9 +433,7 @@
       if (kind === "audio/mp4" || kind === "audio/m4a" || kind === "audio/aac" || kind === "audio/x-m4a") {
         return "live-recording.m4a";
       }
-      if (kind === "audio/wav" || kind === "audio/wave" || kind === "audio/x-wav") {
-        return "live-recording.wav";
-      }
+      if (kind === "audio/wav" || kind === "audio/wave" || kind === "audio/x-wav") return "live-recording.wav";
       if (kind === "audio/mpeg" || kind === "audio/mp3") return "live-recording.mp3";
       if (kind === "audio/webm") return "live-recording.webm";
       return "live-recording.webm";
@@ -1055,7 +447,7 @@
           const comma = dataUrl.indexOf(",");
           resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
         };
-        reader.onerror = () => reject(reader.error || new Error("无法读取音频。 Could not read audio"));
+        reader.onerror = () => reject(reader.error || new Error("无法读取音频"));
         reader.readAsDataURL(blob);
       });
     }
@@ -1063,12 +455,15 @@
     function waitForRecorderStop(recorder) {
       if (!recorder || recorder.state === "inactive") return Promise.resolve();
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("录音没有停止。 Recording did not stop")), 10000);
+        const timer = setTimeout(() => reject(new Error("录音没有停止")), 10000);
         recorder.addEventListener("stop", () => {
           clearTimeout(timer);
           resolve();
         }, { once: true });
         try {
+          if (typeof recorder.requestData === "function" && recorder.state !== "inactive") {
+            recorder.requestData();
+          }
           recorder.stop();
         } catch (err) {
           clearTimeout(timer);
@@ -1077,321 +472,193 @@
       });
     }
 
-    function scrollToSection(id) {
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const target = document.getElementById(id);
-      if (!target) return;
-      target.scrollIntoView({
-        block: "nearest",
-        behavior: reduce ? "auto" : "smooth",
-      });
+    function micMessage(err) {
+      const name = err && err.name ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") return "请允许使用麦克风";
+      if (name === "NotFoundError" || name === "OverconstrainedError") return "没有找到麦克风";
+      return "无法使用麦克风";
     }
 
-    async function runAction(button, work) {
-      if (state.busy) return;
+    async function ensureRun() {
+      if (state.id) return "";
+      const created = await api("/runs", {
+        method: "POST",
+        body: JSON.stringify({ title: "快速录音" }),
+      });
+      if (!created.ok || !created.body || !created.body.id) return shortProblem(created);
+      state.id = created.body.id;
+      return "";
+    }
+
+    async function startRecording() {
+      if (state.busy || state.recorder || state.pendingBlob) return;
+      if (recordEl.disabled || recordEl.getAttribute("aria-disabled") === "true") return;
       state.busy = true;
-      if (button) button.setAttribute("aria-busy", "true");
-      syncChrome({ keepBanner: true });
-      let error = "";
+      syncControls();
+      let stream = null;
       try {
-        error = (await work()) || "";
+        setStatus("正在准备", "requesting");
+        const prepareError = await ensureRun();
+        if (prepareError) {
+          setStatus(prepareError, "error");
+          return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+          setStatus("此浏览器无法使用麦克风", "error");
+          return;
+        }
+        setStatus("正在请求麦克风", "requesting");
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = preferredLiveMime();
+        const recorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime })
+          : new MediaRecorder(stream);
+        const chunks = [];
+        recorder.addEventListener("dataavailable", (event) => {
+          if (event.data && event.data.size > 0) chunks.push(event.data);
+        });
+        recorder.start(1000);
+        state.stream = stream;
+        state.recorder = recorder;
+        state.chunks = chunks;
+        state.mime = recorder.mimeType || mime;
+        state.paused = false;
+        stream = null;
+        const started = await api("/runs/" + state.id + "/live/start", { method: "POST" });
+        if (!started.ok) {
+          discardCapture();
+          setStatus(shortProblem(started), "error");
+          return;
+        }
+        resetElapsed();
+        startElapsed();
+        setStatus("录音中", "recording");
       } catch (err) {
-        error = err && err.message ? err.message : "操作失败。";
+        const captureStarted = Boolean(state.recorder);
+        if (stream) stopTracks(stream);
+        discardCapture();
+        if (captureStarted) state.id = null;
+        setStatus(micMessage(err), "error");
       } finally {
         state.busy = false;
-        if (button) button.removeAttribute("aria-busy");
-        syncChrome({ keepBanner: true });
-        if (error) setBanner(error, "error");
-        else {
-          const guide = guidance();
-          setBanner(guide.banner, guide.tone);
-        }
-        const focus = state.focusAfter;
-        const scroll = state.scrollAfter;
-        state.focusAfter = null;
-        state.scrollAfter = null;
-        if (!error && typeof scroll === "function") scroll();
-        if (!error && focus && !focus.disabled) {
-          try {
-            focus.focus({ preventScroll: true });
-          } catch (focusErr) {
-            focus.focus();
-          }
-        }
+        syncControls();
       }
     }
 
-    createEl.addEventListener("click", () => {
-      runAction(createEl, async () => {
-        const result = await api("/runs", { method: "POST", body: JSON.stringify({ title: "Acceptance run" }) });
-        if (!result.ok) return problemText(result);
-        state.token = null;
-        state.draft = null;
-        state.approved = false;
-        state.runError = "";
-        discardCapture();
-        renderDraft(null);
-        todoTitleEl.value = "";
-        renderWrite("还没有尝试写入。 No write attempted.", "info", null, null);
-        replayEl.replaceChildren();
-        addText(replayEl, "p", "empty", "还没有加载事件。 No events loaded.");
-        paintRun(result.body);
-        return "";
-      });
-    });
-
-    refreshEl.addEventListener("click", () => {
-      runAction(refreshEl, async () => {
-        if (!state.id) return "";
-        const result = await api("/runs/" + state.id);
-        if (!result.ok) return problemText(result);
-        paintRun(result.body);
-        if (result.body.status !== "created") await loadDraft();
-        return "";
-      });
-    });
-
-    importTranscriptEl.addEventListener("click", () => {
-      runAction(importTranscriptEl, async () => {
-        if (!state.id) return "请先创建运行。";
-        setBanner("正在导入文字稿并生成纪要…", "info");
-        const result = await api("/runs/" + state.id + "/import/transcript", {
-          method: "POST",
-          body: JSON.stringify({ text: transcriptEl.value }),
-        });
-        if (!result.ok) return problemText(result);
-        state.token = null;
-        paintRun(result.body);
-        await loadDraft();
-        if (result.body.status === "failed") return state.runError || "纪要生成失败。";
-        state.focusAfter = approveEl;
-        state.scrollAfter = () => scrollToSection("draft-section");
-        return "";
-      });
-    });
-
-    liveStartEl.addEventListener("click", () => {
-      runAction(liveStartEl, async () => {
-        if (!state.id) {
-          setLiveStatus("请先创建运行。 Create a run first.", "error");
-          return "请先创建运行。 Create a run first.";
-        }
-        if (state.recorder || state.pendingBlob) return "";
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          const message = "此浏览器无法采集麦克风。 This browser cannot capture the microphone.";
-          setLiveStatus(message, "error");
-          return message;
-        }
-        setLiveStatus("正在请求麦克风权限。 Requesting microphone permission.", "requesting");
-        setBanner("正在请求麦克风权限。 Requesting microphone permission.", "info");
-        let stream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const mime = preferredLiveMime();
-          const recorder = mime
-            ? new MediaRecorder(stream, { mimeType: mime })
-            : new MediaRecorder(stream);
-          const chunks = [];
-          recorder.addEventListener("dataavailable", (event) => {
-            if (event.data && event.data.size > 0) chunks.push(event.data);
-          });
-          recorder.start(1000);
-          state.stream = stream;
-          state.recorder = recorder;
-          state.chunks = chunks;
-          state.mime = recorder.mimeType || mime;
-          stream = null;
-          const result = await api("/runs/" + state.id + "/live/start", { method: "POST" });
-          if (!result.ok) {
-            discardCapture();
-            setLiveStatus("开始录音失败。 Live start failed.", "error");
-            return problemText(result) || "开始录音失败。 Live start failed.";
+    function togglePause() {
+      const recorder = state.recorder;
+      if (!recorder || state.busy || pauseEl.disabled) return;
+      try {
+        if (!state.paused) {
+          if (typeof recorder.pause !== "function" || recorder.state !== "recording") {
+            setStatus("无法暂停", "error");
+            return;
           }
-          paintRun(result.body);
-          setLiveStatus("正在录音。会议结束请点停止录音。 Recording. Stop live when the meeting ends.", "recording");
+          recorder.pause();
+          state.paused = true;
+          pauseElapsed();
+          setStatus("已暂停", "paused");
+        } else {
+          if (typeof recorder.resume !== "function") {
+            setStatus("无法继续", "error");
+            return;
+          }
+          recorder.resume();
+          state.paused = false;
           startElapsed();
-          return "";
-        } catch (err) {
-          if (stream) {
-            for (const track of stream.getTracks()) track.stop();
-          }
-          discardCapture();
-          const message = err && err.message ? err.message : "麦克风权限失败。 Microphone permission failed";
-          setLiveStatus(message, "error");
-          return message;
+          setStatus("录音中", "recording");
         }
-      });
-    });
+      } catch (err) {
+        setStatus(state.paused ? "无法继续" : "无法暂停", "error");
+      } finally {
+        syncControls();
+      }
+    }
 
-    liveStopEl.addEventListener("click", () => {
-      runAction(liveStopEl, async () => {
-        if (!state.id) return "请先创建运行。";
-        try {
-          if (state.recorder) {
-            const recorder = state.recorder;
-            const chunks = state.chunks;
-            const mime = state.mime || recorder.mimeType || "audio/webm";
-            await waitForRecorderStop(recorder);
-            state.pendingBlob = new Blob(chunks, { type: mime });
-            state.pendingName = filenameForMime(mime);
-            releaseStream();
-            stopElapsed();
-          }
-          if (!state.pendingBlob || state.pendingBlob.size === 0) {
-            state.pendingBlob = null;
-            state.pendingName = "";
-            const message = "没有采集到音频。请新建运行并允许麦克风。 No audio captured. Create a new run and allow the microphone.";
-            setLiveStatus(message, "error");
-            return message;
-          }
-          setLiveStatus("正在上传录音。 Uploading recording.", "uploading");
-          setBanner("正在上传录音并生成纪要…", "info");
-          const contentBase64 = await blobToBase64(state.pendingBlob);
-          const result = await api("/runs/" + state.id + "/live/stop", {
-            method: "POST",
-            body: JSON.stringify({
-              filename: state.pendingName,
-              content_base64: contentBase64,
-            }),
-          });
-          if (!result.ok) {
-            const retry = "停止失败。再次停止录音会重发同一段录音。 Stop failed. Stop live will send the same recording again.";
-            setLiveStatus(retry, "error");
-            return retry + " " + problemText(result);
-          }
+    async function stopRecording() {
+      if (state.busy || stopEl.disabled) return;
+      if (!state.recorder && !state.pendingBlob) return;
+      state.busy = true;
+      syncControls();
+      try {
+        if (state.recorder) {
+          const recorder = state.recorder;
+          const chunks = state.chunks;
+          const mime = state.mime || recorder.mimeType || "audio/webm";
+          await waitForRecorderStop(recorder);
+          state.pendingBlob = new Blob(chunks, { type: mime });
+          state.pendingName = filenameForMime(mime);
+          releaseStream();
+          pauseElapsed();
+        }
+        if (!state.id) {
           state.pendingBlob = null;
           state.pendingName = "";
-          paintRun(result.body);
-          await loadDraft();
-          if (result.body.status === "failed") {
-            setLiveStatus("录音已停止，但纪要没有生成。 Recording stopped. Draft failed.", "error");
-            return state.runError || "纪要生成失败。";
+          setStatus("无法停止录音", "error");
+          return;
+        }
+        if (!state.pendingBlob || state.pendingBlob.size === 0) {
+          state.pendingBlob = null;
+          state.pendingName = "";
+          state.id = null;
+          setStatus("没有录到声音", "error");
+          return;
+        }
+        setStatus("正在上传", "uploading");
+        const contentBase64 = await blobToBase64(state.pendingBlob);
+        const result = await api("/runs/" + state.id + "/live/stop", {
+          method: "POST",
+          body: JSON.stringify({
+            filename: state.pendingName,
+            content_base64: contentBase64,
+          }),
+        });
+        if (!result.ok) {
+          const info = unwrap(result.body);
+          if (info.error === "conflict" || result.status === 409) {
+            state.pendingBlob = null;
+            state.pendingName = "";
+            state.id = null;
+            setStatus("这次录音已结束，请重新开始", "error");
+            return;
           }
-          setLiveStatus("录音已停止。草稿可以审阅。 Recording stopped. Draft is ready for review.", "ready");
-          state.focusAfter = approveEl;
-          state.scrollAfter = () => scrollToSection("draft-section");
-          return "";
-        } catch (err) {
+          setStatus("上传失败，再点停止重试", "error");
+          return;
+        }
+        state.pendingBlob = null;
+        state.pendingName = "";
+        state.id = null;
+        if (result.body && result.body.status === "failed") {
+          setStatus("已上传，处理失败", "error");
+          return;
+        }
+        setStatus("已保存", "done");
+      } catch (err) {
+        const keep = Boolean(state.pendingBlob);
+        if (state.recorder) {
           releaseStream();
-          stopElapsed();
-          const message = err && err.message ? err.message : "无法停止录音。 Could not stop recording";
-          setLiveStatus(message, "error");
-          return message;
+          pauseElapsed();
         }
-      });
-    });
-
-    approveEl.addEventListener("click", () => {
-      decide({ decision: "approve" });
-    });
-
-    rejectEl.addEventListener("click", () => {
-      decide({ decision: "reject" });
-    });
-
-    editApproveEl.addEventListener("click", () => {
-      if (!state.draft) return;
-      const todos = JSON.parse(JSON.stringify(state.draft.todos || []));
-      if (todos[0]) todos[0].title = todoTitleEl.value;
-      decide({
-        decision: "edit_approve",
-        edits: { minutes: state.draft.minutes, todos },
-      });
-    });
-
-    async function decide(payload) {
-      const button = payload.decision === "reject"
-        ? rejectEl
-        : payload.decision === "edit_approve"
-          ? editApproveEl
-          : approveEl;
-      await runAction(button, async () => {
-        if (!state.id) return "请先创建运行。";
-        setBanner(payload.decision === "reject" ? "正在提交拒绝…" : "正在提交审阅…", "info");
-        const result = await api("/runs/" + state.id + "/review", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        if (!result.ok) return problemText(result);
-        state.token = result.body.review_token || null;
-        state.runError = "";
-        applyStatus(result.body.status, payload.decision !== "reject");
-        await loadDraft();
-        if (payload.decision === "reject") state.focusAfter = createEl;
-        else {
-          state.focusAfter = writeWithEl;
-          state.scrollAfter = () => scrollToSection("write-section");
-        }
-        return "";
-      });
+        if (!keep) state.id = null;
+        setStatus(keep ? "上传失败，再点停止重试" : "无法停止录音", "error");
+      } finally {
+        state.busy = false;
+        syncControls();
+      }
     }
 
-    writeWithEl.addEventListener("click", () => {
-      writeFeishu(state.token, writeWithEl);
-    });
-
-    writeWithoutEl.addEventListener("click", () => {
-      writeFeishu(null, writeWithoutEl);
-    });
-
-    function writeFeishu(token, button) {
-      return runAction(button, async () => {
-        if (!state.id) return "请先创建运行。";
-        setBanner(token ? "正在写入飞书…" : "正在提交不带 token 的写入…", "info");
-        const result = await api("/runs/" + state.id + "/write_feishu_tasks", {
-          method: "POST",
-          body: JSON.stringify(token ? { review_token: token } : {}),
-        });
-        if (!result.ok) {
-          const text = problemText(result);
-          renderWrite(text, "error", null, { http: result.status, body: result.body }, true);
-          const refreshed = await api("/runs/" + state.id);
-          if (refreshed.ok) paintRun(refreshed.body);
-          if (unwrap(result.body).reason === "consumed") return "";
-          return text;
-        }
-        paintRun(result.body);
-        const receipts = result.body.feishu_receipts || [];
-        if (result.body.status === "succeeded") {
-          renderWrite(
-            "写入成功。" + receiptSentence(receipts) + " review token 已消耗。再次提交会返回 consumed，不会再建一组任务。",
-            "success",
-            receipts,
-            { http: result.status, body: result.body }
-          );
-          return "";
-        }
-        renderWrite(
-          "写入未完成。" + receiptSentence(receipts) + " 同一个 review token 仍然有效。再点「带 token 写入」只会补还没有成功的待办。",
-          "error",
-          receipts,
-          { http: result.status, body: result.body }
-        );
-        return "";
-      });
-    }
-
-    replayButtonEl.addEventListener("click", () => {
-      runAction(replayButtonEl, async () => {
-        if (!state.id) return "请先创建运行。";
-        const result = await api("/runs/" + state.id + "/replay");
-        if (!result.ok) {
-          renderReplay(result.body);
-          return problemText(result);
-        }
-        renderReplay(result.body);
-        return "";
-      });
-    });
+    recordEl.addEventListener("click", () => { startRecording(); });
+    pauseEl.addEventListener("click", () => { togglePause(); });
+    stopEl.addEventListener("click", () => { stopRecording(); });
 
     window.addEventListener("pagehide", () => {
-      stopElapsed();
-      const stream = state.stream;
-      if (!stream) return;
-      for (const track of stream.getTracks()) track.stop();
+      pauseElapsed();
+      stopTracks(state.stream);
     });
 
-    syncChrome();
+    resetElapsed();
+    setStatus("待命", "idle");
+    syncControls();
   </script>
 </body>
 </html>

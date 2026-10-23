@@ -3,9 +3,8 @@
 # fixtures/transcript.txt, and exits non-zero unless status is awaiting_review.
 # Prints the draft title, todo count, and replay event types.
 #
-# Does not leave a server running. To click through the acceptance page,
-# leave scripts/meeting-dev.sh running and open
-# http://127.0.0.1:5001/meeting/ui
+# Does not leave a server running. The recording card is
+# http://127.0.0.1:5001/meeting/ui while scripts/meeting-dev.sh is up.
 # Stop that server with Ctrl+C.
 #
 # Reuse a server that is already on the default mocks:
