@@ -39,6 +39,8 @@ cp backend/app/meeting/env.example .env
 scripts/meeting-dev.sh
 ```
 
+Before turning `MOCK_ASR`, `MOCK_LLM`, or `MOCK_FEISHU` off, run `scripts/meeting-dev.sh --check`. It lists required and optional variables for those flags and does not print secrets. `MOCK_LLM=0` needs `VOLCANO_API_KEY` or `ARK_API_KEY`. `MOCK_ASR=0` needs the Volcano speech key, or `OPENAI_API_KEY` when `ASR_BACKEND` is `openai` or `whisper`. `MOCK_FEISHU=0` needs a ready `lark-cli` user, or `FEISHU_APP_ID` and `FEISHU_APP_SECRET` for the enterprise backend. The same check runs before the server starts. A missing key stops startup. Fill keys in `.env` copied from `backend/app/meeting/env.example`. A run never substitutes fixture minutes. The default `MOCK_*=1` path needs no keys.
+
 Open <http://127.0.0.1:5001/meeting/ui>. `GET /health` returns `status: ok` when the process is up. Stop the script with Ctrl+C. Optional, while that server is still on the default mocks: `MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Flags and live vendors: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
 
 Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system introduces a **Multi-Agent Workforce** that **boosts productivity** through parallel execution, customization, and privacy protection.

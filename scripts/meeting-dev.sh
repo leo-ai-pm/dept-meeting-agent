@@ -5,6 +5,13 @@
 #   scripts/meeting-dev.sh
 #   # open http://127.0.0.1:5001/meeting/ui
 #
+#   scripts/meeting-dev.sh --check
+#
+# --check lists required and optional env for the current MOCK_* flags
+# and exits. It does not start uvicorn and does not print secret values.
+# With no arguments, the same check runs first. A missing live key
+# exits non-zero and does not start the server.
+#
 # Creates the SQLite directory, runs `uv sync` in backend/, and execs
 # uvicorn on 127.0.0.1:5001. Stop with Ctrl+C. The database file is kept.
 # A backgrounded process writes backend/runtime/run.pid after startup;
@@ -21,6 +28,38 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 HOST="127.0.0.1"
 PORT="5001"
+CHECK_ONLY=0
+
+if [[ $# -gt 1 ]]; then
+  echo "meeting-dev: usage: scripts/meeting-dev.sh [--check]" >&2
+  exit 2
+fi
+if [[ $# -eq 1 ]]; then
+  case "$1" in
+    --check)
+      CHECK_ONLY=1
+      ;;
+    --help|-h)
+      cat <<'EOF'
+usage: scripts/meeting-dev.sh [--check]
+
+  --check  Print required and optional meeting env for the current
+           MOCK_* flags, then exit. Do not start uvicorn.
+           Exit 1 when a live flag is missing its key or login.
+           Secret values are not printed.
+
+No arguments: run that check, then start uvicorn only if it passes.
+MOCK_ASR, MOCK_LLM, and MOCK_FEISHU default to 1.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "meeting-dev: unknown argument: $1" >&2
+      echo "meeting-dev: usage: scripts/meeting-dev.sh [--check]" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 declare -A SHELL_SET=()
 declare -A FILE_HAS=()
@@ -162,6 +201,34 @@ printf 'meeting-dev: uv sync in %s\n' "${BACKEND_DIR}"
   cd "${BACKEND_DIR}"
   uv sync
 )
+
+run_env_check() {
+  (
+    cd "${BACKEND_DIR}"
+    uv run python -m app.meeting.envcheck
+  )
+}
+
+if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+  set +e
+  check_output="$(run_env_check)"
+  check_status=$?
+  set -e
+  printf '%s\n' "${check_output}"
+  exit "${check_status}"
+fi
+
+set +e
+check_output="$(run_env_check)"
+check_status=$?
+set -e
+if [[ "${check_status}" -ne 0 ]]; then
+  printf '%s\n' "${check_output}"
+  echo "meeting-dev: config check failed. The server was not started." >&2
+  echo "meeting-dev: copy backend/app/meeting/env.example to .env and fill the missing keys, or set MOCK_*=1." >&2
+  exit "${check_status}"
+fi
+printf 'meeting-dev: config check ok\n'
 
 if command -v timeout >/dev/null 2>&1 \
   && timeout 1 bash -c "echo >/dev/tcp/${HOST}/${PORT}" >/dev/null 2>&1

@@ -41,7 +41,9 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FAIL = "Volcano minutes request failed: "
 _MISSING_KEY = (
     "Minutes LLM is not configured. Set MOCK_LLM=1 or "
-    "VOLCANO_API_KEY (or ARK_API_KEY) for Volcano Ark."
+    "VOLCANO_API_KEY (or ARK_API_KEY) for Volcano Ark. "
+    "Copy backend/app/meeting/env.example to .env and fill that key. "
+    "Fixture minutes are not used."
 )
 _MINUTES_SYSTEM = (
     "You draft meeting minutes from a transcript. "

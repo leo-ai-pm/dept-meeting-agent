@@ -115,8 +115,14 @@ def test_missing_key_does_not_invent_minutes(monkeypatch):
     error = result["error"] or ""
     assert "MOCK_LLM" in error
     assert "VOLCANO_API_KEY" in error
+    assert "env.example" in error
+    assert "Fixture minutes are not used" in error
     assert _FIXTURE_MARK not in error
     assert result["draft_summary"] is None
+    replay = service.replay(run["id"])
+    event_types = [event["type"] for event in replay["events"]]
+    assert "run.failed" in event_types
+    assert "tool.draft_minutes" not in event_types
     with pytest.raises(MeetingServiceError) as raised:
         service.get_draft(run["id"])
     assert raised.value.status_code == 404

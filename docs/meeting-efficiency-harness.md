@@ -177,7 +177,9 @@ and `MediaRecorder`, then posts `filename` and `content_base64` to
 `MOCK_ASR=1` the service uses `mock-live:{id}` and does not invent a
 transcript from silence. The page itself does not send an empty body.
 
-Live vendors (only when you mean to leave the fixtures):
+Live vendors (only when you mean to leave the fixtures). Run
+`scripts/meeting-dev.sh --check` first. It names each missing key and
+points at `backend/app/meeting/env.example`. Secret values are not printed.
 
 1. `MOCK_ASR=0` uses Volcano standard ASR unless `ASR_BACKEND` is
    `openai` or `whisper`. The speech key is the openspeech key

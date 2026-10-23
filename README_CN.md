@@ -39,6 +39,8 @@ cp backend/app/meeting/env.example .env
 scripts/meeting-dev.sh
 ```
 
+把 `MOCK_ASR`、`MOCK_LLM` 或 `MOCK_FEISHU` 设为 `0` 之前，先运行 `scripts/meeting-dev.sh --check`。它按当前开关列出必填和可选环境变量，不打印密钥。`MOCK_LLM=0` 需要 `VOLCANO_API_KEY` 或 `ARK_API_KEY`。`MOCK_ASR=0` 需要豆包语音密钥；`ASR_BACKEND` 为 `openai` 或 `whisper` 时改为 `OPENAI_API_KEY`。`MOCK_FEISHU=0` 需要已登录的 `lark-cli` 用户，或企业自建应用的 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`。启动服务器前会再跑一遍同一检查。缺密钥时进程不会起来。密钥写在从 `backend/app/meeting/env.example` 复制的 `.env` 里。运行不会改用夹具纪要。默认 `MOCK_*=1` 不需要密钥。
+
 打开 <http://127.0.0.1:5001/meeting/ui>。进程起来后 `GET /health` 返回 `status: ok`。在该终端按 Ctrl+C 停止。默认 mock 仍开着时，可选：`MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`。说明：[docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md)。环境变量与真实供应商：[backend/app/meeting/README.md](./backend/app/meeting/README.md)。
 
 基于 [CAMEL-AI][camel-site] 广受赞誉的开源项目，我们的系统引入了 **多智能体工作流**，通过并行执行、定制化和隐私保护 **提升生产力**。
