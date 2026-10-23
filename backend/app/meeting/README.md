@@ -325,6 +325,18 @@ separate generate action.
 a hash mismatch, or with a consumed or expired token, returns HTTP 403
 `hard_reject`, appends `permission.hard_reject`, and does not call Feishu.
 
+The token is consumed only after every todo receipt is ok. 同一个
+`review_token` 在全部待办写成功之前不会作废。A second write after success
+is `consumed` and does not create another set of tasks. If a write fails
+mid-batch or the adapter raises, the run stays retryable: status `failed`,
+replay shows `tool.feishu_receipts` and `run.failed`, and the same token
+can be posted again. Todos that already have a stored `feishu_task_id` are
+not sent on that retry. lark-cli still receives `--idempotency-key`, and
+the enterprise body still sends `client_token`, so a create that reached
+Feishu without a stored receipt is not opened twice. A new import retires
+an unconsumed token; approve again before writing. Unconfigured Feishu
+still returns 503 and does not consume the token.
+
 ## Tests
 
 ```bash

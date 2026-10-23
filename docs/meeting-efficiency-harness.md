@@ -104,7 +104,11 @@ created
   approve / edit_approve   stays awaiting_review, issues review_token
   reject              → rejected (review_token is null)
   write + valid token → writing_feishu → succeeded
-  pipeline or write error → failed
+    token consumed only after every receipt is ok
+  write failure       → failed (token stays valid; replay shows the error)
+  same token retry    → writing_feishu → succeeded
+    todos that already have a task id are not created again
+  pipeline error      → failed
 ```
 
 `import/audio`, `import/transcript`, and `live/stop` run that pipeline
@@ -129,6 +133,51 @@ A missing, bad, mismatched, consumed, or expired token returns HTTP 403
 draft does the same for any later write. `edit_approve` changes the hash
 and issues a new token; the previous token no longer matches.
 
+## 写入幂等 / Idempotent Feishu write
+
+批准后的 `review_token` 在每一条待办都写成功之前不会被消费。成功之后
+再用同一个 token 提交，返回 `consumed`，飞书适配器不会被第二次调用，
+也不会再建一组任务。
+
+某一条待办失败，或传输层抛错时，运行进入 `failed`。回放里有
+`tool.feishu_receipts`（`ok: false`，传输错误还有 `error`）和
+`run.failed`。Token 仍然有效，`active_jti` 还在。用同一个 token 再写一次
+即可：已经有 `feishu_task_id` 的待办不会再送出，只补还没有回执的那些。
+全部成功后才消费 token，状态变为 `succeeded`。回执写在运行快照里，所以
+换一个进程、换一个没有内存缓存的适配器，重试仍然不会把已成功的待办再建
+一次。
+
+远程去重仍用每条待办的 `idempotency_key`。lark-cli 传
+`--idempotency-key`，企业应用的任务体带 `client_token`。若飞书已经建了
+任务但回执没落盘，重试会带上同一个 key。进程内的 mock 和企业适配器也会
+按这个 key 记住已成功的任务号。
+
+未配置的飞书（503）在调用适配器之前返回，不消费 token。新的导入会作废
+尚未消费的 token 并清掉批准内容；失败后如果重新导入，需要重新批准。
+
+The review token is consumed only after every todo receipt is ok. Posting
+that same token again returns `consumed`, does not call the Feishu
+adapter, and does not create a second set of tasks.
+
+A failed todo or a transport error moves the run to `failed`. Replay
+includes `tool.feishu_receipts` (`ok: false`, plus `error` on a transport
+failure) and `run.failed`. The token stays valid and `active_jti` stays
+set. Posting the same token again sends only todos that do not yet have a
+`feishu_task_id`. The token is consumed when those succeed, and the run
+becomes `succeeded`. Receipts live on the run snapshot, so a new process
+and a new adapter with an empty memory cache still will not create a
+second task for a todo that already succeeded.
+
+Remote dedupe still uses each todo’s `idempotency_key`: `--idempotency-key`
+for lark-cli, and `client_token` on the enterprise task body. A retry of a
+create that reached Feishu but did not leave a stored receipt sends that
+same key. The in-process mock and enterprise adapters also remember a
+successful task id for that key.
+
+Unconfigured Feishu returns 503 before the adapter is called and does not
+consume the token. A new import retires an unconsumed token and clears the
+approval. Importing again after a failed write requires a new approval.
+
 ## 成功标准 / Success metrics
 
 These are the v1 bars. No millisecond SLO is hard-coded.
@@ -137,7 +186,7 @@ These are the v1 bars. No millisecond SLO is hard-coded.
 | --- | --- | --- |
 | Time-to-draft after stop or import | The same HTTP response is `awaiting_review` or `failed`. No second generate call. | Wall clock of `POST …/import/audio`, `POST …/import/transcript`, or `POST …/live/stop`. Replay `duration_ms` on `tool.transcribe`, `tool.draft_minutes`, and `tool.extract_todos` is the provider time inside that request. |
 | Review gate never bypassed | A write with no valid token does not create a task. Status stays `awaiting_review` after a missing-token reject. | `tests/app/meeting/test_feishu_gate.py`. UI button “Write without token” posts `{}`. |
-| Feishu write requires the token | Body field `review_token`, bound to this run id and this content hash, TTL `MEETING_REVIEW_TOKEN_TTL_SECONDS` (default 3600), consumed on a write that gets past the readiness check. | `backend/app/meeting/review_token.py`. Unconfigured Feishu returns 503 and does not consume the token. |
+| Feishu write requires the token | Body field `review_token`, bound to this run id and this content hash, TTL `MEETING_REVIEW_TOKEN_TTL_SECONDS` (default 3600). Consumed only after every todo receipt is ok. The same token after that success is `consumed` and does not create a second task. A failed write leaves it valid for a retry that fills in only the missing todos. | `backend/app/meeting/review_token.py` and `write_feishu` in `service.py`. Tests in `test_feishu_write_retry.py`. Unconfigured Feishu returns 503 and does not consume the token. |
 | Mock CI green | `cd backend && uv run pytest tests/app/meeting -q` with the default mocks. | Includes `test_router_mount.py` (meeting routes exist, `/runs/{id}/import/transcript` does not) and `test_state_machine.py`. |
 | Live smoke | Manual checklist below. Not a CI job. | Vendor calls happen only when the matching `MOCK_*=0` and that provider is configured. Missing keys fail the run and do not substitute fixtures. |
 

@@ -146,6 +146,7 @@ class MeetingService:
         with self._lock:
             run = self._require(run_id)
             self._ensure_importable(run)
+            self._retire_open_review(run)
             digest = sha256_bytes(content)
             self._transition(run, INGESTING)
             run.input_kind = "audio"
@@ -178,6 +179,7 @@ class MeetingService:
         with self._lock:
             run = self._require(run_id)
             self._ensure_importable(run)
+            self._retire_open_review(run)
             digest = sha256_text(cleaned)
             self._transition(run, INGESTING)
             run.input_kind = "transcript"
@@ -324,6 +326,15 @@ class MeetingService:
         *,
         tool_name: str = "write_feishu_tasks",
     ) -> dict[str, Any]:
+        """Create one Feishu task per approved todo.
+
+        The review token stays active until every receipt is ok. A second
+        submit after that success is ``consumed`` and does not call Feishu.
+        A mid-batch or transport failure leaves the token active, stores the
+        failure on the replay log, and accepts the same token again. Todos
+        that already have a stored task id are not sent on that retry.
+        """
+
         with self._lock:
             run = self._require(run_id)
             token = (review_token or "").strip()
@@ -341,58 +352,149 @@ class MeetingService:
                 self._hard_reject(run, exc.reason, tool_name)
             if run.status == REJECTED:
                 self._hard_reject(run, "rejected", tool_name)
-            if run.status != AWAITING_REVIEW or not run.approved:
+            if not run.approved:
                 self._hard_reject(run, "invalid_state", tool_name)
             if run.final_minutes is None or run.final_todos is None:
                 self._hard_reject(run, "hash_mismatch", tool_name)
+            if run.status not in {AWAITING_REVIEW, FAILED, WRITING_FEISHU}:
+                self._hard_reject(run, "invalid_state", tool_name)
+            if run.status == FAILED and not run.active_jti:
+                self._hard_reject(run, "invalid_state", tool_name)
             if not self.feishu.ready():
                 raise MeetingServiceError(
                     "feishu_not_configured",
                     _feishu_not_ready_message(self.feishu),
                     status_code=503,
                 )
-            self._transition(run, WRITING_FEISHU)
-            self.tokens.consume(record.jti)
-            run.active_jti = None
-            summary = {
-                "title": run.final_minutes["title"],
-                "decisions": list(run.final_minutes["decisions"])[:5],
-                "run_id": run.id,
+            # Readiness failed above without consuming the token or leaving
+            # awaiting_review. Consume only after the receipts are all ok.
+            retrying = run.status in {FAILED, WRITING_FEISHU}
+            if run.status != WRITING_FEISHU:
+                self._transition(run, WRITING_FEISHU)
+            pending = self._pending_feishu_todos(run)
+            pending_keys = {
+                str(todo.get("idempotency_key") or "") for todo in pending
             }
-            request = FeishuWriteRequest(
-                run_id=run.id,
-                minutes_summary=summary,
-                todos=list(run.final_todos),
-            )
             self._event(
                 run,
                 "tool.write_feishu_tasks",
                 f"Authorized {tool_name}",
                 {
                     "tool": tool_name,
+                    "retry": retrying,
                     "idempotency_keys": [
-                        todo["idempotency_key"] for todo in run.final_todos
+                        str(todo.get("idempotency_key") or "")
+                        for todo in pending
+                    ],
+                    "skipped_idempotency_keys": [
+                        str(todo.get("idempotency_key") or "")
+                        for todo in run.final_todos
+                        if str(todo.get("idempotency_key") or "")
+                        not in pending_keys
                     ],
                 },
             )
-            try:
-                receipts = self.feishu.write_tasks(request)
-            except Exception as exc:
-                logger.exception("Feishu adapter failed")
-                self._fail(run, str(exc))
-                return self._snapshot(run)
+            fresh: list[dict[str, Any]] = []
+            if pending:
+                summary = {
+                    "title": run.final_minutes["title"],
+                    "decisions": list(run.final_minutes["decisions"])[:5],
+                    "run_id": run.id,
+                }
+                request = FeishuWriteRequest(
+                    run_id=run.id,
+                    minutes_summary=summary,
+                    todos=pending,
+                )
+                try:
+                    fresh = self.feishu.write_tasks(request)
+                except Exception as exc:
+                    logger.exception("Feishu adapter failed")
+                    message = _feishu_error_text(exc)
+                    self._event(
+                        run,
+                        "tool.feishu_receipts",
+                        "Feishu write failed",
+                        {
+                            "receipts": list(run.feishu_receipts),
+                            "ok": False,
+                            "error": message,
+                            "retryable": True,
+                        },
+                    )
+                    self._fail(run, message)
+                    return self._snapshot(run)
+            receipts = self._merge_feishu_receipts(run, fresh)
+            succeeded = _feishu_receipts_ok(receipts)
             run.feishu_receipts = receipts
             self._event(
                 run,
                 "tool.feishu_receipts",
-                "Feishu task receipts",
-                {"receipts": receipts},
+                "Feishu task receipts" if succeeded else "Feishu write failed",
+                {
+                    "receipts": receipts,
+                    "ok": succeeded,
+                    "retryable": not succeeded,
+                },
             )
-            if receipts and all(item.get("ok") for item in receipts):
+            if succeeded:
+                self.tokens.consume(record.jti)
+                run.active_jti = None
+                run.error = None
                 self._transition(run, SUCCEEDED)
             else:
                 self._fail(run, "One or more Feishu tasks failed")
             return self._snapshot(run)
+
+    def _retire_open_review(self, run: Run) -> None:
+        """Consume an open review when a new ingest replaces the draft.
+
+        A failed Feishu write keeps its token for one retry. Importing
+        again must not let that token create tasks for the previous todos.
+        """
+
+        if not run.approved and run.active_jti is None:
+            return
+        self.tokens.consume_run(run.id)
+        run.approved = False
+        run.active_jti = None
+        run.final_minutes = None
+        run.final_todos = None
+        run.content_hash = None
+        run.feishu_receipts = []
+        run.error = None
+
+    def _pending_feishu_todos(self, run: Run) -> list[dict[str, Any]]:
+        done = _successful_feishu_keys(run.feishu_receipts)
+        return [
+            todo
+            for todo in (run.final_todos or [])
+            if str(todo.get("idempotency_key") or "") not in done
+        ]
+
+    def _merge_feishu_receipts(
+        self, run: Run, fresh: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        stored = _successful_feishu_keys(run.feishu_receipts)
+        by_key = {key: dict(item) for key, item in stored.items()}
+        for item in fresh:
+            key = item.get("idempotency_key")
+            if isinstance(key, str) and key:
+                by_key[key] = item
+        merged: list[dict[str, Any]] = []
+        for todo in run.final_todos or []:
+            key = str(todo.get("idempotency_key") or "")
+            if key in by_key:
+                merged.append(by_key[key])
+                continue
+            merged.append(
+                {
+                    "ok": False,
+                    "error": "missing receipt",
+                    "idempotency_key": key,
+                }
+            )
+        return merged
 
     def _approve(
         self, run: Run, decision: str, edits: dict[str, Any]
@@ -812,6 +914,33 @@ def _build_feishu() -> FeishuTaskAdapter:
     return UnconfiguredFeishuTaskAdapter(
         unknown_feishu_backend_message(backend)
     )
+
+
+def _successful_feishu_keys(
+    receipts: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
+    for item in receipts:
+        key = item.get("idempotency_key")
+        if (
+            isinstance(key, str)
+            and key
+            and item.get("ok")
+            and item.get("feishu_task_id")
+        ):
+            found[key] = item
+    return found
+
+
+def _feishu_receipts_ok(receipts: list[dict[str, Any]]) -> bool:
+    return bool(receipts) and all(
+        item.get("ok") and item.get("feishu_task_id") for item in receipts
+    )
+
+
+def _feishu_error_text(exc: Exception) -> str:
+    text = str(exc).strip() or exc.__class__.__name__
+    return text[:500]
 
 
 def _feishu_not_ready_message(feishu: FeishuTaskAdapter) -> str:

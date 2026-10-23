@@ -14,6 +14,11 @@
 
 """One-time review tokens bound to run_id + content hash + TTL.
 
+The meeting service consumes a token only after every Feishu todo write
+has succeeded. A failed or partial write leaves the row unconsumed so the
+same token can retry. Replaying it after that success is ``consumed`` and
+must not create another task.
+
 Token records can live in memory or in the meeting SQLite file. The HMAC
 secret is never written to that file.
 """
@@ -167,6 +172,8 @@ class ReviewTokenService:
         return record
 
     def consume(self, jti: str) -> None:
+        """Mark one token consumed. Call this only after a full Feishu success."""
+
         with self._lock:
             if not self._ledger.consume_token(jti):
                 raise ReviewTokenError("invalid_token")
