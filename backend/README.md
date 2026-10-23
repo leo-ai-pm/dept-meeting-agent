@@ -40,7 +40,12 @@ export EIGENT_HANDS_CLUSTER_CONFIG_FILE=~/.eigent/hands_clusters.toml
 ### Meeting efficiency module
 
 Department meeting runs live under `/meeting` and do not replace kernel `/runs`.
-`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to `1`. `MOCK_ASR=0` calls
+From the repository root, `scripts/meeting-dev.sh` creates the SQLite
+directory, runs `uv sync` in `backend/`, and serves `127.0.0.1:5001`. Stop it with
+Ctrl+C. Open `http://127.0.0.1:5001/meeting/ui`. `GET /health` is the
+existing health route. Copy `app/meeting/env.example` to the repository
+`.env` before adding keys. `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU`
+default to `1`. `MOCK_ASR=0` calls
 豆包录音文件识别标准版 (submit, then query, resource `volc.seedasr.auc`)
 when `VOLCANO_ASR_API_KEY` is set (`ASR_BACKEND=volcano`, the default).
 Flash resource `volc.bigasr.auc_turbo` is not called. That speech key is
@@ -54,9 +59,10 @@ closed when the key is missing. `MOCK_FEISHU=0` creates tasks with `lark-cli`
 fallback. See `app/meeting/README.md`.
 
 ```bash
-export MOCK_ASR=1 MOCK_LLM=1 MOCK_FEISHU=1
-uv run uvicorn main:api --port 5001
+# from the repository root
+scripts/meeting-dev.sh
 # acceptance page: http://127.0.0.1:5001/meeting/ui
+# stop: Ctrl+C
 ```
 
 i18n operation process: https://github.com/Anbarryprojects/fastapi-babel

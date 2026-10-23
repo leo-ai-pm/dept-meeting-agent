@@ -9,34 +9,71 @@ This file remains the operator reference for flags and vendor behavior.
 
 ## Run locally
 
-From `backend/`, with the project virtualenv:
+A clone can open the acceptance page on this machine. No cloud host and
+no API keys. `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` stay on until you
+change them.
+
+Prerequisites: `git`, `curl`, and [uv](https://docs.astral.sh/uv/). The
+backend requires Python 3.11 (`>=3.11,<3.12`). `uv sync` downloads that
+interpreter when it is missing.
 
 ```bash
-export MOCK_ASR=1
-export MOCK_LLM=1
-export MOCK_FEISHU=1
-uv run uvicorn main:api --port 5001
+curl -LsSf https://astral.sh/uv/install.sh | sh
+git clone https://github.com/leo-ai-pm/dept-meeting-agent.git
+cd dept-meeting-agent
+cp backend/app/meeting/env.example .env
+scripts/meeting-dev.sh
 ```
 
+`scripts/meeting-dev.sh` creates the SQLite directory (default
+`backend/data/`), runs `uv sync` in `backend/`, and starts uvicorn in the
+foreground on `127.0.0.1:5001`. The command it runs is
+`uv run uvicorn main:api --host 127.0.0.1 --port 5001` from `backend/`.
+
+Stop that terminal with Ctrl+C. The database file is kept. If you
+backgrounded the script, the process writes `backend/runtime/run.pid`
+after startup; `kill` that pid. `backend/data/` and `backend/runtime/`
+are gitignored.
+
 Acceptance page: <http://127.0.0.1:5001/meeting/ui>
+
+`GET /health` is the existing Eigent health route. It returns
+`{"status":"ok","service":"eigent"}` when this process is up. `GET /`
+points at that route. `GET /meeting/ui` is the acceptance page. This
+slice does not add another health service.
 
 The page copy is Simplified Chinese first. Buttons keep the English names
 Create run, Import transcript, Start live, Stop live, Approve, Reject,
 Write with token, Write without token, and Replay.
 
-`MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` default to on when unset. CI and the
-acceptance page use the fixtures in `fixtures/`. No API keys are required.
+The script sets each of `MOCK_ASR`, `MOCK_LLM`, and `MOCK_FEISHU` to `1`
+only when that variable is unset in the shell and unset in `.env`,
+`backend/.env`, and the `.env.development` file next to either of those.
+A value already in the shell wins over the file. Other variables stay in
+the file. The API loads those files on startup, and also `~/.eigent/.env`
+at lower precedence. The copied `.env` is gitignored. Do not commit it.
+CI and the acceptance page use the fixtures in `fixtures/` while the mock
+flags stay on.
 
-Mock demo from the repository root. The script forces those three mock
-flags on, imports `fixtures/transcript.txt`, prints the draft title, todo
-count, and replay event types, and exits non-zero on failure. It does not
-leave a server running:
+A missing vendor key does not stop the process from booting. Set a
+`MOCK_*` flag to `0` only when that vendor's key is in `.env`. The run
+fails and does not substitute the fixtures. This script does not check
+keys at startup.
+
+Optional mock demo, while `scripts/meeting-dev.sh` is still up and still
+on the default mocks:
 
 ```bash
-scripts/meeting-mock-demo.sh
+MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh
 ```
 
-How that script behaves is also in
+Without `MEETING_BASE_URL`, that script starts its own short-lived
+server, forces the three mock flags on, imports `fixtures/transcript.txt`,
+prints the draft title, todo count, and replay event types, and exits
+non-zero on failure. It does not leave a server running.
+
+Live vendors (Volcano speech, Ark minutes, `lark-cli`) are in the flags
+table below and in
 [docs/meeting-efficiency-harness.md](../../../docs/meeting-efficiency-harness.md).
 
 ## Local store
