@@ -128,9 +128,10 @@ correctly filled without a rename ≥70%.
 
 Live time-to-draft is dominated by standard ASR polling. The default poll
 budget is `VOLCANO_ASR_POLL_TIMEOUT` (1800 seconds). Each Ark call uses a
-180 second client timeout, and the minutes path makes two calls. v1 does
-not promise a sub-minute live draft. The mock path returns the fixture
-draft in that same response, which is what CI asserts.
+300 second client timeout (`MEETING_LLM_TIMEOUT`), and the minutes path
+makes two calls. v1 does not promise a sub-minute live draft. The mock
+path returns the fixture draft in that same response, which is what CI
+asserts.
 
 ### Live smoke checklist
 

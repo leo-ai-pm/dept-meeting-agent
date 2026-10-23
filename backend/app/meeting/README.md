@@ -65,6 +65,7 @@ How that script behaves is also in
 | `VOLCANO_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | Ark data-plane root. The client posts `{base}/chat/completions` |
 | `ARK_BASE_URL` | same default | Alias of `VOLCANO_BASE_URL` when that variable is unset or blank |
 | `MEETING_LLM_MODEL` | `doubao-seed-2-1-turbo-260628` | Ark `model` field: a Model ID or an inference endpoint ID (`ep-...`). Empty uses this default |
+| `MEETING_LLM_TIMEOUT` | `300` | Seconds for each Ark chat completions HTTP call when `MOCK_LLM=0`. Blank, non-numeric, or non-positive values keep 300. Not the ASR poll timeout |
 | `MEETING_REVIEW_TOKEN_TTL_SECONDS` | `3600` | Review token lifetime |
 | `MEETING_REVIEW_TOKEN_SECRET` | unset | HMAC secret. If unset, the process mints an ephemeral secret and does not write it |
 | `FEISHU_BACKEND` | `lark_cli` | Live backend when `MOCK_FEISHU=0`. `lark_cli` (also `lark-cli` or `cli`) runs `lark-cli`. `enterprise` selects the custom-app fallback |
@@ -165,8 +166,11 @@ The default model is the activated Ark Model ID
 `doubao-seed-2-1-turbo-260628`. Leave `MEETING_LLM_MODEL` unset or empty
 to use that ID. Set `MEETING_LLM_MODEL` to another Model ID or an inference
 endpoint ID (`ep-...`) to override it. A rejected model fails the run.
-Deep-thinking replies can run past two minutes, so the minutes client
-waits 180 seconds. Feishu keeps its own timeout.
+Deep-thinking replies can run past two minutes. Live `extract_todos`
+took about 173 seconds and hit the previous 180 second client timeout,
+so the minutes client waits 300 seconds. Set `MEETING_LLM_TIMEOUT` to
+override that wait. Blank, non-numeric, or non-positive values keep
+300. Feishu keeps its own timeout. This does not change ASR timeouts.
 
 Set `MOCK_FEISHU=0` to create one Feishu task per approved todo with the
 official Lark/Feishu CLI (`lark-cli`, npm package `@larksuite/cli`). Install
