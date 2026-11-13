@@ -14,8 +14,6 @@
 [![][discord-image]][discord-url]<br>
 [![Reddit][reddit-image]][reddit-url]
 [![Wechat][wechat-image]][wechat-url]
-[![][sponsor-shield]][sponsor-link]
-[![][built-with-camel]][camel-github]
 [![][join-us-image]][join-us]
 
 </div>
@@ -44,8 +42,6 @@ scripts/meeting-dev.sh
 打开 <http://127.0.0.1:5001/meeting/ui>。进程起来后 `GET /health` 返回 `status: ok`。在该终端按 Ctrl+C 停止。默认 mock 仍开着时，可选：`MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`。说明：[docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md)。环境变量与真实供应商：[backend/app/meeting/README.md](./backend/app/meeting/README.md)。
 
 扩展：多用户尚未实现。本机后续怎么接，见 [docs/multi-user-extension.md](./docs/multi-user-extension.md)。
-
-基于 [CAMEL-AI][camel-site] 广受赞誉的开源项目，我们的系统引入了 **多智能体工作流**，通过并行执行、定制化和隐私保护 **提升生产力**。
 
 ### ⭐ 100% 开源 - 🥇 本地部署 - 🏆 MCP 集成
 
@@ -90,10 +86,8 @@ scripts/meeting-dev.sh
 - [🌟 保持领先 - 开源 Cowork](#保持领先---开源 Cowork)
 - [🗺️ 路线图 - 开源 Cowork](#️-路线图---开源 Cowork)
 - [📖 贡献](#-%E8%B4%A1%E7%8C%AE)
-  - [核心贡献者](#%E6%A0%B8%E5%BF%83%E8%B4%A1%E7%8C%AE%E8%80%85)
   - [杰出大使](#%E6%9D%B0%E5%87%BA%E5%A4%A7%E4%BD%BF)
 - [生态系统](#%E7%94%9F%E6%80%81%E7%B3%BB%E7%BB%9F)
-- [📄 开源许可证](#-%E5%BC%80%E6%BA%90%E8%AE%B8%E5%8F%AF%E8%AF%81)
 - [🌐 社区与联系](#-%E7%A4%BE%E5%8C%BA%E4%B8%8E%E8%81%94%E7%B3%BB)
 
 ####
@@ -164,7 +158,6 @@ uv sync
 
 适合需要最高安全性、定制化和控制的组织：
 
-- **商业许可证** - [查看许可证 →](LICENSE)
 - **独家功能**（如 SSO 和定制开发）
 - **可扩展的企业部署**
 - **协商的 SLA** 和实施服务
@@ -301,24 +294,6 @@ Eigent 开源 Cowork桌面应用基于现代、可靠的技术构建，确保可
 ## [🤝 贡献][contribution-link]
 
 我们相信通过开源 Cowork建立信任。您的创意贡献将推动 `Eigent` 的创新。探索我们的 GitHub 问题与项目，加入我们 🤝❤️ [贡献指南][contribution-link]
-
-## Contributors
-
-<a href="https://github.com/eigent-ai/eigent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=eigent-ai/eigent" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
-
-<br>
-
-## [❤️ 赞助][sponsor-link]
-
-Eigent 基于 [CAMEL-AI.org][camel-ai-org-github] 的研究和基础设施构建。[赞助 CAMEL-AI.org][sponsor-link] 将使 `Eigent` 变得更好。
-
-## **📄 开源许可证**
-
-本仓库采用 [**Eigent 开源许可证**](LICENSE)，基于 Apache 2.0 并附加额外条款。
 
 ## 🌐 社区与联系
 

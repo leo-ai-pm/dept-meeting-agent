@@ -14,8 +14,6 @@
 [![][discord-image]][discord-url]<br>
 [![Reddit][reddit-image]][reddit-url]
 [![Wechat][wechat-image]][wechat-url]
-[![][sponsor-shield]][sponsor-link]
-[![][built-with-camel]][camel-github]
 [![][join-us-image]][join-us]
 
 </div>
@@ -44,8 +42,6 @@ Before turning `MOCK_ASR`, `MOCK_LLM`, or `MOCK_FEISHU` off, run `scripts/meetin
 Open <http://127.0.0.1:5001/meeting/ui>. `GET /health` returns `status: ok` when the process is up. Stop the script with Ctrl+C. Optional, while that server is still on the default mocks: `MEETING_BASE_URL=http://127.0.0.1:5001 scripts/meeting-mock-demo.sh`. Story: [docs/meeting-efficiency-harness.md](./docs/meeting-efficiency-harness.md). Flags and live vendors: [backend/app/meeting/README.md](./backend/app/meeting/README.md).
 
 Extension: multi-user. The local seam is [docs/multi-user-extension.md](./docs/multi-user-extension.md). v1 stays single-user on this machine.
-
-Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system introduces a **Multi-Agent Workforce** that **boosts productivity** through parallel execution, customization, and privacy protection.
 
 ### ⭐ 100% Open Source - 🥇 Local Deployment - 🏆 MCP Integration
 
@@ -90,10 +86,8 @@ Built on [CAMEL-AI][camel-site]'s acclaimed open-source project, our system intr
 - [🌟 Staying ahead - Open Source Cowork](#-staying-ahead---open-source-Cowork)
 - [🗺️ Roadmap - Open Source Cowork](#%EF%B8%8F-roadmap---open-source-Cowork)
 - [📖 Contributing](#-contributing)
-  - [Main Contributors](#main-contributors)
   - [Distinguished ambassador](#distinguished-ambassador)
 - [Ecosystem](#ecosystem)
-- [📄 Open Source License](#-open-source-license)
 - [🌐 Community & contact](#-community--contact)
 
 ####
@@ -307,24 +301,6 @@ Our open-source Cowork continues to evolve with input from the community. Here's
 ## [🤝 Contributing][contribution-link]
 
 We believe in building trust and embracing all forms of open-source collaborations. Your creative contributions help drive the innovation of `Eigent`. Explore our GitHub issues and projects to dive in and show us what you’ve got 🤝❤️ [Contribution Guideline][contribution-link]
-
-## Contributors
-
-<a href="https://github.com/eigent-ai/eigent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=eigent-ai/eigent" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
-
-<br>
-
-## [❤️ Sponsor][sponsor-link]
-
-Eigent is built on top of [CAMEL-AI.org][camel-ai-org-github]'s research and infrastructures. [Sponsoring CAMEL-AI.org][sponsor-link] will make `Eigent` better.
-
-## **📄 Open Source License**
-
-This repository is licensed under the [Apache License 2.0](LICENSE).
 
 ## 🌐 Community & Contact
 

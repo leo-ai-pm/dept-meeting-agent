@@ -14,8 +14,6 @@
 [![][discord-image]][discord-url]<br>
 [![Reddit][reddit-image]][reddit-url]
 [![Wechat][wechat-image]][wechat-url]
-[![][sponsor-shield]][sponsor-link]
-[![][built-with-camel]][camel-github]
 [![][join-us-image]][join-us]
 
 </div>
@@ -29,8 +27,6 @@
 <br/>
 
 **Eigent** é a aplicação desktop Cowork código aberto que capacita você a construir, gerenciar e implantar uma força de trabalho de IA personalizada, capaz de transformar seus fluxos de trabalho mais complexos em tarefas automatizadas. Como um produto líder de Cowork código aberto, o Eigent reúne o melhor da colaboração open source e da automação impulsionada por IA.
-
-Construído sobre o aclamado projeto open source da [CAMEL-AI][camel-site], nosso sistema introduz uma **Força de Trabalho Multiagente** que **aumenta a produtividade** por meio de execução paralela, personalização e proteção de privacidade.
 
 ### ⭐ 100% Open Source - 🥇 Implantação Local - 🏆 Integração MCP
 
@@ -76,9 +72,6 @@ Construído sobre o aclamado projeto open source da [CAMEL-AI][camel-site], noss
 - [🌟 Mantendo-se à Frente - Cowork Open Source](#-mantendo-se-%C3%A0-frente---Cowork-open-source)
 - [🗺️ Roadmap - Cowork Open Source](#-roadmap---Cowork-open-source)
 - [🤝 Contribuição](#-contribui%C3%A7%C3%A3o)
-  - [Contribuidores](#contribuidores)
-- [❤️ Patrocínio](#-patroc%C3%ADnio)
-- [📄 Licença Open Source](#-licen%C3%A7a-open-source)
 - [🌐 Comunidade & Contato](#-comunidade--contato)
 
 ####
@@ -292,24 +285,6 @@ Nosso Cowork código aberto continua a evoluir com feedback da comunidade. Aqui 
 ## [🤝 Contribuição][contribution-link]
 
 Acreditamos em construir confiança e abraçar todas as formas de colaboração open source. Suas contribuições criativas ajudam a impulsionar a inovação do `Eigent`. Explore as issues e projetos no GitHub para participar e mostrar do que você é capaz 🤝❤️ [Guia de Contribuição][contribution-link]
-
-## Contribuidores
-
-<a href="https://github.com/eigent-ai/eigent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=eigent-ai/eigent" />
-</a>
-
-Feito com [contrib.rocks](https://contrib.rocks).
-
-<br>
-
-## [❤️ Patrocínio][sponsor-link]
-
-O Eigent é construído sobre as pesquisas e infraestruturas da [CAMEL-AI.org][camel-ai-org-github]. [Patrocinar a CAMEL-AI.org][sponsor-link] tornará o `Eigent` ainda melhor.
-
-## **📄 Licença Open Source**
-
-Este repositório é licenciado sob a [Licença Apache 2.0](LICENSE).
 
 ## 🌐 Comunidade & Contato
 

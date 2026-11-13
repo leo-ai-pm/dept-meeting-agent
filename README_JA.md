@@ -14,8 +14,6 @@
 [![][discord-image]][discord-url]<br>
 [![Reddit][reddit-image]][reddit-url]
 [![Wechat][wechat-image]][wechat-url]
-[![][sponsor-shield]][sponsor-link]
-[![][built-with-camel]][camel-github]
 [![][join-us-image]][join-us]
 
 </div>
@@ -29,8 +27,6 @@
 <br/>
 
 **Eigent**は、オープンソースのコワークデスクトップアプリケーションです。複雑なワークフローを自動化タスクに変換できるカスタムAIワークフォースを構築、管理、デプロイする力を提供します。先進的なオープンソース Cowork製品として、EigentはオープンソースコラボレーションとAI駆動の自動化の最良の部分を組み合わせています。
-
-[CAMEL-AI][camel-site]の評価の高いオープンソースプロジェクトを基盤として構築されており、**マルチエージェントワークフォース**を導入し、並列実行、カスタマイズ、プライバシー保護を通じて**生産性を向上**させます。
 
 ### ⭐ 100%オープンソース - 🥇 ローカルデプロイメント - 🏆 MCP統合
 
@@ -77,7 +73,6 @@
 - [🗺️ ロードマップ - オープンソース Cowork](#️-ロードマップ---オープンソース Cowork)
 - [📖 コントリビューション](#-%E3%82%B3%E3%83%B3%E3%83%88%E3%83%AA%E3%83%93%E3%83%A5%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)
 - [エコシステム](#%E3%82%A8%E3%82%B3%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0)
-- [📄 オープンソースライセンス](#-%E3%82%AA%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9)
 - [🌐 コミュニティ & お問い合わせ](#-%E3%82%B3%E3%83%9F%E3%83%A5%E3%83%8B%E3%83%86%E3%82%A3--%E3%81%8A%E5%95%8F%E3%81%84%E5%90%88%E3%82%8F%E3%81%9B)
 
 ####
@@ -291,24 +286,6 @@ Eigent オープンソース Coworkデスクトップは、スケーラビリテ
 ## [🤝 コントリビューション][contribution-link]
 
 私たちは信頼を築き、あらゆる形式のオープンソースコラボレーションを歓迎することを信じています。あなたの創造的な貢献が`Eigent`のイノベーションを推進します。GitHubのissuesとプロジェクトを探索して、あなたの力を見せてください 🤝❤️ [コントリビューションガイドライン][contribution-link]
-
-## Contributors
-
-<a href="https://github.com/eigent-ai/eigent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=eigent-ai/eigent" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
-
-<br>
-
-## [❤️ スポンサー][sponsor-link]
-
-Eigentは[CAMEL-AI.org][camel-ai-org-github]の研究とインフラストラクチャの上に構築されています。[CAMEL-AI.orgをスポンサー][sponsor-link]することで`Eigent`がより良くなります。
-
-## **📄 オープンソースライセンス**
-
-このリポジトリは[Apache License 2.0](LICENSE)の下でライセンスされています。
 
 ## 🌐 コミュニティ & お問い合わせ
 
